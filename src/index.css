@@ -1,0 +1,211 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Typography ─────────────────────────────────────────────────────── */
+  --font-sans: "Inter", "Inter Variable", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Inter", "Inter Display", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* ── Brand palette ──────────────────────────────────────────────────── */
+  --color-brand-50:  #eef0ff;
+  --color-brand-100: #e0e3ff;
+  --color-brand-200: #c4caff;
+  --color-brand-300: #a3a9ff;
+  --color-brand-400: #8a87ff;
+  --color-brand-500: #635bff;     /* Stripe indigo */
+  --color-brand-600: #5046e4;
+  --color-brand-700: #4338ca;
+  --color-brand-800: #3730a3;
+  --color-brand-900: #312e81;
+
+  --color-violet: #7a5af8;
+  --color-cyan: #00d4ff;
+  --color-fuchsia: #ff5cf7;
+  --color-mint: #00d3a7;
+
+  /* ── Semantic surface tokens (light only) ───────────────────────────── */
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f6f9fc;
+  --color-surface-strong: #eef2f7;
+  --color-ink: #0a0e1a;
+  --color-ink-2: #1a1f36;
+  --color-ink-muted: #425466;
+  --color-ink-soft: #6b7280;
+  --color-ink-faint: #9ca3af;
+  --color-line: #e3e8ee;
+  --color-line-strong: #d6dde6;
+
+  /* ── Signal palette (preserved from alpha engine) ──────────────────── */
+  --color-success: #00b87a;
+  --color-success-soft: #e7f9f1;
+  --color-success-line: #a7dfc4;
+  --color-warning: #f59e0b;
+  --color-warning-soft: #fef9e7;
+  --color-warning-line: #fde68a;
+  --color-danger: #ef4444;
+  --color-danger-soft: #fef2f2;
+  --color-danger-line: #fecaca;
+  --color-info: #3b82f6;
+  --color-info-soft: #eff6ff;
+  --color-info-line: #bfdbfe;
+  --color-gold: #d97706;
+
+  /* ── Radii ──────────────────────────────────────────────────────────── */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+
+  /* ── Shadows (soft, layered, Stripe-style) ─────────────────────────── */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 12px 40px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.06);
+  --shadow-glow: 0 12px 40px -12px rgba(99, 91, 255, 0.45);
+
+  /* ── Animations ─────────────────────────────────────────────────────── */
+  --animate-fade-in: fade-in 0.4s ease-out;
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-mesh: mesh 18s ease-in-out infinite;
+  --animate-marquee: marquee 30s linear infinite;
+  --animate-shimmer: shimmer 2s linear infinite;
+  --animate-spin-slow: spin 3s linear infinite;
+
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes mesh {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(3%, -2%, 0) scale(1.04);
+  }
+  66% {
+    transform: translate3d(-2%, 3%, 0) scale(0.97);
+  }
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position: 200% 0; }
+}
+
+/* ── Base layer ───────────────────────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    color-scheme: light;
+    scroll-behavior: smooth;
+  }
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    line-height: 1.55;
+  }
+  ::selection {
+    background: rgba(99, 91, 255, 0.18);
+    color: var(--color-ink);
+  }
+  /* Hide scrollbars in WebKit while keeping scrollability */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--color-line-strong); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-ink-faint); }
+}
+
+/* ── Utility helpers ──────────────────────────────────────────────────── */
+@utility text-balance {
+  text-wrap: balance;
+}
+
+@utility text-pretty {
+  text-wrap: pretty;
+}
+
+/* Headline gradient text */
+@utility text-gradient-brand {
+  background-image: linear-gradient(
+    120deg,
+    #635bff 0%,
+    #7a5af8 35%,
+    #00d4ff 70%,
+    #00d3a7 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* Stripe-style gradient border (1px). Apply with `gradient-ring` class. */
+.gradient-ring {
+  position: relative;
+  background-clip: padding-box;
+}
+.gradient-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #635bff, #00d4ff 60%, rgba(0, 211, 167, 0.2));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+.gradient-ring:hover::before {
+  opacity: 1;
+}
+
+/* Soft brand-tinted glow used behind hero/CTA cards */
+.brand-glow {
+  position: relative;
+}
+.brand-glow::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: radial-gradient(60% 80% at 50% 0%, rgba(99, 91, 255, 0.18), transparent 70%);
+  z-index: -1;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
