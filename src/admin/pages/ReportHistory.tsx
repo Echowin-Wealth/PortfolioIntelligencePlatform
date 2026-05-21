@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/shared/supabaseClient';
 import type { ReportHistory as ReportHistoryType } from '@/shared/types';
+
+type ProfileSummary = { name: string; email: string; phone: string | null };
+type ReportHistoryRow = ReportHistoryType & { profiles?: ProfileSummary | null };
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,7 +23,7 @@ import { formatPercent } from '@/shared/lib/utils';
 const PAGE_SIZE = 25;
 
 export function ReportHistory() {
-  const [reports, setReports] = useState<ReportHistoryType[]>([]);
+  const [reports, setReports] = useState<ReportHistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [query, setQuery] = useState('');
@@ -30,17 +33,25 @@ export function ReportHistory() {
       setLoading(true);
       const { data } = await supabase
         .from('report_history')
-        .select('*')
+        .select('*, profiles(name, email, phone)')
         .order('created_at', { ascending: false })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-      setReports((data as ReportHistoryType[]) ?? []);
+      setReports((data as ReportHistoryRow[]) ?? []);
       setLoading(false);
     }
     load();
   }, [page]);
 
   const filtered = query.trim()
-    ? reports.filter((r) => r.investor.toLowerCase().includes(query.trim().toLowerCase()))
+    ? reports.filter((r) => {
+        const q = query.trim().toLowerCase();
+        return (
+          r.investor.toLowerCase().includes(q) ||
+          (r.profiles?.name ?? '').toLowerCase().includes(q) ||
+          (r.profiles?.email ?? '').toLowerCase().includes(q) ||
+          (r.profiles?.phone ?? '').toLowerCase().includes(q)
+        );
+      })
     : reports;
 
   return (
@@ -57,7 +68,7 @@ export function ReportHistory() {
       <Card className="overflow-hidden">
         <div className="flex flex-col gap-3 border-b border-[var(--color-line)] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <Input
-            placeholder="Filter by investor name…"
+            placeholder="Filter by investor, name, email, phone…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="max-w-xs"
@@ -98,6 +109,9 @@ export function ReportHistory() {
             <TableHeader>
               <TableRow>
                 <TableHead>Investor</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Phone</TableHead>
                 <TableHead className="text-right">Funds</TableHead>
                 <TableHead className="text-right">Avg XIRR</TableHead>
                 <TableHead className="text-right">Avg α</TableHead>
@@ -111,6 +125,9 @@ export function ReportHistory() {
               {filtered.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-medium text-[var(--color-ink)]">{r.investor}</TableCell>
+                  <TableCell className="text-[var(--color-ink-2)]">{r.profiles?.name || '—'}</TableCell>
+                  <TableCell className="text-[var(--color-ink-soft)]">{r.profiles?.email || '—'}</TableCell>
+                  <TableCell className="font-mono text-[var(--color-ink-soft)]">{r.profiles?.phone || '—'}</TableCell>
                   <TableCell className="text-right font-mono">{r.fund_count}</TableCell>
                   <TableCell className="text-right font-mono">
                     {Number(r.avg_xirr).toFixed(2)}%
@@ -155,7 +172,7 @@ export function ReportHistory() {
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-10 text-center text-[var(--color-ink-soft)]">
+                  <TableCell colSpan={11} className="py-10 text-center text-[var(--color-ink-soft)]">
                     {query ? `No matches for "${query}"` : 'No reports found.'}
                   </TableCell>
                 </TableRow>

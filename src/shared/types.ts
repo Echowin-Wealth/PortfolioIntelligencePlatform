@@ -38,6 +38,7 @@ export interface CategoryMapping {
 
 export interface ReportHistory {
   id?: string;
+  user_id?: string | null;
   investor: string;
   fund_count: number;
   avg_alpha: number;
@@ -45,6 +46,7 @@ export interface ReportHistory {
   star_count: number;
   exit_count: number;
   generated_by: 'client' | 'admin';
+  funds_json?: RawFundRecord[] | null;
   created_at?: string;
 }
 

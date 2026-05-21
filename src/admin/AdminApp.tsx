@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { useProfile } from '@/shared/profile';
 import { Shell } from './layout/Shell';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
@@ -19,9 +20,10 @@ const titles: Record<string, string> = {
 
 function AdminLayout() {
   const { session, loading, signOut } = useAuth();
+  const { profile, loading: profileLoading } = useProfile();
   const location = useLocation();
 
-  if (loading) {
+  if (loading || (session && profileLoading)) {
     return (
       <div className="grid min-h-screen place-items-center bg-white text-[var(--color-ink-soft)]">
         <div className="flex items-center gap-2 text-[13px]">
@@ -34,6 +36,11 @@ function AdminLayout() {
 
   if (!session) {
     return <Navigate to="/admin/login" state={{ from: location }} replace />;
+  }
+
+  // Block non-admin sessions (e.g. Google-signed-in client users) from /admin/*.
+  if (!profile?.is_admin) {
+    return <Navigate to="/" replace />;
   }
 
   const title = titles[location.pathname] ?? 'Admin';
@@ -53,18 +60,22 @@ function AdminLayout() {
 }
 
 export function AdminApp() {
-  const { session, loading } = useAuth();
+  const { session, loading: authLoading } = useAuth();
+  const { profile, loading: profileLoading } = useProfile();
+  const loading = authLoading || (session ? profileLoading : false);
 
   return (
     <Routes>
       <Route
         path="login"
         element={
-          loading ? null : session ? (
-            <Navigate to="/admin/dashboard" replace />
-          ) : (
-            <Login />
-          )
+          loading
+            ? null
+            : session && profile?.is_admin
+              ? <Navigate to="/admin/dashboard" replace />
+              : session && !profile?.is_admin
+                ? <Navigate to="/" replace />
+                : <Login />
         }
       />
       <Route path="*" element={<AdminLayout />} />

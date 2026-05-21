@@ -26,78 +26,79 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-async function sha256(message: string): Promise<string> {
-  const msgBuffer = new TextEncoder().encode(message);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+function jsonResponse(body: unknown, status: number) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
 }
 
 serve(async (req: Request) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'Method not allowed' }, 405);
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const isAdmin = req.headers.get('x-admin-token') === 'true';
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
 
   // ── Parse request body ────────────────────────────────────────────────────
   let body: { text?: string; reportMeta?: Record<string, unknown> };
   try {
     body = await req.json();
   } catch {
-    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'Invalid JSON body' }, 400);
   }
 
   const text = body.text ?? '';
   if (!text || text.length < 100) {
-    return new Response(JSON.stringify({ error: 'No usable PDF text provided' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return jsonResponse({ error: 'No usable PDF text provided' }, 400);
   }
 
-  // Rate limiting runs only for requests that will actually call Anthropic,
-  // so metadata-only POSTs (short `text`, returns 400 above) don't burn quota.
+  // ── Authenticate user (skipped for admin-token requests from /admin/generate)
+  let userId: string | null = null;
   if (!isAdmin) {
-    const ipHash = await sha256(ip);
-    const today = new Date().toISOString().split('T')[0];
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    if (!token) {
+      return jsonResponse({ error: 'unauthorized' }, 401);
+    }
+    const { data: userResp, error: userErr } = await supabase.auth.getUser(token);
+    if (userErr || !userResp.user) {
+      return jsonResponse({ error: 'unauthorized' }, 401);
+    }
+    userId = userResp.user.id;
 
-    const { data: rateLimitRow } = await supabase
-      .from('rate_limits')
-      .select('count')
-      .eq('ip_hash', ipHash)
-      .eq('window_date', today)
-      .single();
-
-    const currentCount = (rateLimitRow?.count as number) ?? 0;
-
-    if (currentCount >= DAILY_LIMIT) {
-      return new Response(
-        JSON.stringify({
-          error: 'rate_limit',
-          message: `You've reached the limit of ${DAILY_LIMIT} free reports per day. Please try again tomorrow.`,
-        }),
-        { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    // Require a verified phone before any LLM spend.
+    const { data: profile, error: profileErr } = await supabase
+      .from('profiles')
+      .select('phone_verified')
+      .eq('id', userId)
+      .maybeSingle();
+    if (profileErr || !profile?.phone_verified) {
+      return jsonResponse({ error: 'phone_unverified' }, 403);
     }
 
-    await supabase.from('rate_limits').upsert(
-      { ip_hash: ipHash, count: currentCount + 1, window_date: today },
-      { onConflict: 'ip_hash,window_date' }
-    );
+    // Per-user daily limit: count rows already created today for this user.
+    const startOfDay = new Date();
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const { count } = await supabase
+      .from('report_history')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .gte('created_at', startOfDay.toISOString());
+    if ((count ?? 0) >= DAILY_LIMIT) {
+      return jsonResponse(
+        {
+          error: 'rate_limit',
+          message: `You've reached the limit of ${DAILY_LIMIT} reports per day. Please try again tomorrow.`,
+        },
+        429
+      );
+    }
   }
 
   // ── Call Anthropic ────────────────────────────────────────────────────────
@@ -136,7 +137,7 @@ ${text.substring(0, 90000)}`;
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 8000,
         messages: [{ role: 'user', content: extractionPrompt }],
       }),
@@ -166,9 +167,9 @@ ${text.substring(0, 90000)}`;
       : await callAnthropic();
   } catch (err) {
     const e = err as { status?: number; details?: unknown };
-    return new Response(
-      JSON.stringify({ error: 'Anthropic API error', details: e.details }),
-      { status: e.status ?? 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    return jsonResponse(
+      { error: 'Anthropic API error', details: e.details },
+      e.status ?? 502
     );
   }
 
@@ -178,7 +179,7 @@ ${text.substring(0, 90000)}`;
     .replace(/^```(?:json)?\s*/, '')
     .replace(/\s*```\s*$/, '') ?? '';
 
-  let funds: unknown[];
+  let funds: Array<Record<string, unknown>>;
   try {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
@@ -189,22 +190,33 @@ ${text.substring(0, 90000)}`;
       else throw new Error('No array found');
     }
   } catch {
-    return new Response(
-      JSON.stringify({ error: 'Claude returned invalid JSON. Please try again.' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    return jsonResponse(
+      { error: 'Claude returned invalid JSON. Please try again.' },
+      500
     );
   }
 
-  // ── Log to report_history (best-effort) ──────────────────────────────────
-  if (body.reportMeta) {
-    supabase.from('report_history').insert({
-      ...body.reportMeta,
+  // ── Persist a skeleton row. Client patches alpha metrics via RLS update.
+  const investor =
+    (funds[0]?.investor_name as string | undefined)?.trim() || 'Client';
+  let reportId: string | null = null;
+  const { data: inserted, error: insertErr } = await supabase
+    .from('report_history')
+    .insert({
+      user_id: userId,
+      investor,
+      fund_count: funds.length,
+      funds_json: funds,
       generated_by: isAdmin ? 'admin' : 'client',
-    }).then(() => {}).catch(() => {});
+    })
+    .select('id')
+    .single();
+  if (insertErr) {
+    // Surface, but don't block the user from seeing their funds.
+    console.error('report_history insert failed', insertErr);
+  } else {
+    reportId = (inserted as { id: string }).id;
   }
 
-  return new Response(JSON.stringify({ funds }), {
-    status: 200,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
+  return jsonResponse({ funds, reportId }, 200);
 });

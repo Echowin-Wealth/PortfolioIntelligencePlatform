@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Menu, X } from 'lucide-react';
+import { ArrowRight, FileText, LogOut, Menu, X } from 'lucide-react';
 import { Container } from '@/shared/ui/Container';
 import { BrandLogo } from '@/shared/ui/BrandLogo';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/shared/lib/utils';
+import { useAuth } from '@/shared/hooks/useAuth';
 
 const links = [
   { label: 'Product', href: '#analyze' },
@@ -17,6 +18,7 @@ const links = [
 export function TopNav() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const { session, signOut } = useAuth();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -52,12 +54,30 @@ export function TopNav() {
         </nav>
 
         <div className="hidden md:flex items-center gap-2">
-          <Link
-            to="/admin"
-            className="text-[13.5px] font-medium text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors px-3"
-          >
-            Sign in
-          </Link>
+          {session ? (
+            <>
+              <Link
+                to="/my-reports"
+                className="inline-flex items-center gap-1.5 text-[13.5px] font-medium text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors px-3"
+              >
+                <FileText className="size-3.5" /> My reports
+              </Link>
+              <button
+                type="button"
+                onClick={() => signOut()}
+                className="inline-flex items-center gap-1.5 text-[13.5px] font-medium text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors px-3"
+              >
+                <LogOut className="size-3.5" /> Sign out
+              </button>
+            </>
+          ) : (
+            <Link
+              to="/admin"
+              className="text-[13.5px] font-medium text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors px-3"
+            >
+              Admin
+            </Link>
+          )}
           <Button asChild size="sm" className="h-9">
             <a href="#analyze">
               Analyze portfolio <ArrowRight className="size-3.5" />
@@ -87,13 +107,35 @@ export function TopNav() {
                 {l.label}
               </a>
             ))}
-            <Link
-              to="/admin"
-              onClick={() => setOpen(false)}
-              className="rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-surface-muted)]"
-            >
-              Sign in
-            </Link>
+            {session ? (
+              <>
+                <Link
+                  to="/my-reports"
+                  onClick={() => setOpen(false)}
+                  className="rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-surface-muted)]"
+                >
+                  My reports
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    void signOut();
+                  }}
+                  className="rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-surface-muted)]"
+                >
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <Link
+                to="/admin"
+                onClick={() => setOpen(false)}
+                className="rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-surface-muted)]"
+              >
+                Admin
+              </Link>
+            )}
             <Button asChild className="mt-2">
               <a href="#analyze" onClick={() => setOpen(false)}>
                 Analyze portfolio <ArrowRight className="size-4" />
