@@ -21,11 +21,13 @@ export interface RawFundRecord {
   investor_name?: string;
 }
 
-export interface BenchmarkEntry {
+export type BenchmarkIndex = 'N50' | 'NLM' | 'N500';
+
+export interface BenchmarkPrice {
   id?: string;
-  index_code: 'N50' | 'NLM' | 'N500' | 'DEBT';
-  days: number;
-  xirr: number;
+  index_code: BenchmarkIndex;
+  date: string; // ISO yyyy-mm-dd
+  tri_close: number;
   updated_at?: string;
 }
 

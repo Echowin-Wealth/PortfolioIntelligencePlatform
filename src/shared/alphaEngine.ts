@@ -1,83 +1,213 @@
 import { supabase } from './supabaseClient';
-import type { BenchmarkEntry, FundRecord, RawFundRecord, SignalType, AlphaThresholds } from './types';
+import type {
+  BenchmarkIndex,
+  BenchmarkPrice,
+  FundRecord,
+  RawFundRecord,
+  SignalType,
+  AlphaThresholds,
+} from './types';
 
-// Fallback hardcoded tables (used if Supabase fetch fails)
-const N50_FALLBACK: Record<number, number> = {
-  2534:11.8,2528:11.8,2521:11.8,2401:11.5,2400:11.5,2305:12.1,2281:12.1,2275:12.1,
-  2234:12.5,2172:11.5,2108:11.0,2057:14.5,2054:15.5,2053:15.5,2051:14.5,2047:15.5,
-  2044:14.0,2032:14.2,2030:14.2,1917:9.2,1918:9.2,1891:9.2,1780:9.2,1659:7.9,1640:7.9,
-  1515:9.17,1514:9.5,1501:9.5,1499:9.5,1493:9.5,1381:8.5,1380:8.5,1385:8.5,1379:8.5,
-  1301:9.0,1281:9.0,1235:7.94,1234:7.94,1233:7.94,1232:7.94,1224:7.94,1221:7.94,
-  1200:7.8,1192:7.8,1134:9.8,1051:9.5,1042:9.5,1010:8.5,843:5.5,842:5.5,812:5.5,
-  808:5.5,776:5.5,763:5.5,744:5.5,730:5.5,706:5.5,700:5.5,667:8.5,625:5.0,470:8.2,
-  400:7.5,350:5.6,238:5.5,232:5.5,231:5.5,230:5.5,21:9.2,
+// DEBT has no TRI series — it stays a fixed annualised rate.
+const DEBT_RATE = 5.8;
+// Used only when an equity index has no TRI series uploaded yet, so the product
+// keeps working until benchmark data is loaded.
+const EQUITY_FALLBACK = 12;
+
+const MS_PER_YEAR = 365 * 24 * 60 * 60 * 1000;
+
+// ── Date parsing ──────────────────────────────────────────────────────────────
+const MONTHS: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
 };
 
-const NLM_FALLBACK: Record<number, number> = {
-  2534:13.8,2528:12.0,2521:13.8,2401:14.0,2400:14.0,2305:15.46,2281:15.46,2275:11.84,
-  2172:13.5,2108:13.5,2057:16.5,2054:15.5,2053:15.5,2051:16.5,2047:16.5,2032:16.0,
-  2030:16.0,1918:12.1,1780:11.05,1659:9.5,1640:9.5,1515:11.5,1514:11.72,1499:11.72,
-  1493:11.72,1385:13.0,1381:13.0,1380:13.0,1379:13.0,1301:12.5,1281:12.0,1235:13.86,
-  1234:13.86,1233:13.86,1232:13.86,1224:13.86,1221:13.86,1200:13.5,1192:13.8,1134:13.0,
-  1051:12.5,1042:12.5,843:6.0,812:6.0,808:6.0,776:6.0,763:6.0,744:6.0,730:6.0,706:6.0,
-  667:9.8,625:6.0,470:9.0,350:6.0,238:9.0,
-};
+/**
+ * Parse the date formats this app sees, returning a UTC timestamp (ms) or null:
+ *  - ISO            "2016-05-17"        (benchmark_prices.date column)
+ *  - DD-MMM-YYYY    "17-May-2016"       (TRI xlsx files)
+ *  - DD-MMM-YY      "14-Jun-23"         (statement inv_date → 2023)
+ *  - DD/MM/YYYY     numeric day-first
+ */
+export function parseFlexibleDate(input: string): number | null {
+  if (!input) return null;
+  const str = String(input).trim();
 
-const N500_FALLBACK: Record<number, number> = {
-  2534:12.5,2528:12.0,2521:12.5,2401:13.0,2400:13.0,2305:13.0,2281:13.0,2172:12.0,
-  2108:12.0,2054:15.5,2053:15.5,2047:15.5,1918:12.0,1780:11.42,1659:10.0,1514:12.0,
-  1499:12.0,1493:12.0,1301:11.0,1281:11.0,1134:11.0,843:5.5,812:5.5,808:5.5,776:5.5,
-  763:5.5,744:5.5,730:5.5,706:5.5,667:9.0,470:9.5,
-};
+  let m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3]);
 
-type BenchTable = Record<number, number>;
+  m = str.match(/^(\d{1,2})[-/ ]([A-Za-z]{3,})[-/ ](\d{2,4})$/);
+  if (m) {
+    const mon = MONTHS[m[2].slice(0, 3).toLowerCase()];
+    if (mon === undefined) return null;
+    let y = +m[3];
+    if (y < 100) y += y < 70 ? 2000 : 1900;
+    return Date.UTC(y, mon, +m[1]);
+  }
+
+  m = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (m) {
+    let y = +m[3];
+    if (y < 100) y += y < 70 ? 2000 : 1900;
+    return Date.UTC(y, +m[2] - 1, +m[1]);
+  }
+
+  const t = Date.parse(str);
+  return isNaN(t) ? null : t;
+}
+
+// ── XIRR ────────────────────────────────────────────────────────────────────
+interface CashFlow {
+  amount: number;
+  t: number; // UTC ms
+}
+
+/**
+ * XIRR — the annualised rate r solving Σ amount / (1+r)^(years from first flow) = 0.
+ * Newton–Raphson with a bisection fallback. Returns a fraction (0.12 = 12%).
+ * For the 2-cash-flow benchmark case this equals point-to-point CAGR.
+ */
+export function xirr(flows: CashFlow[]): number {
+  if (flows.length < 2) return 0;
+  const t0 = flows[0].t;
+  const yr = (t: number) => (t - t0) / MS_PER_YEAR;
+  const npv = (r: number) =>
+    flows.reduce((s, f) => s + f.amount / Math.pow(1 + r, yr(f.t)), 0);
+  const dnpv = (r: number) =>
+    flows.reduce((s, f) => s - (yr(f.t) * f.amount) / Math.pow(1 + r, yr(f.t) + 1), 0);
+
+  let r = 0.1;
+  for (let i = 0; i < 100; i++) {
+    const f = npv(r);
+    if (Math.abs(f) < 1e-7) return r;
+    const d = dnpv(r);
+    if (d === 0) break;
+    let nr = r - f / d;
+    if (!isFinite(nr)) break;
+    if (nr <= -0.9999) nr = (r - 0.9999) / 2; // stay above -100%
+    if (Math.abs(nr - r) < 1e-9) return nr;
+    r = nr;
+  }
+
+  // Bisection fallback on [-0.9999, 10]
+  let lo = -0.9999;
+  let hi = 10;
+  let flo = npv(lo);
+  for (let i = 0; i < 200; i++) {
+    const mid = (lo + hi) / 2;
+    const fm = npv(mid);
+    if (Math.abs(fm) < 1e-7) return mid;
+    if (flo < 0 === fm < 0) {
+      lo = mid;
+      flo = fm;
+    } else {
+      hi = mid;
+    }
+  }
+  return (lo + hi) / 2;
+}
+
+// ── Benchmark TRI series ──────────────────────────────────────────────────────
+interface Bar {
+  t: number; // UTC ms
+  v: number; // TRI close
+}
+type SeriesMap = Record<BenchmarkIndex, Bar[]>;
 
 // Cache so we don't re-fetch on every call within a session
-let cachedTables: Record<string, BenchTable> | null = null;
+let cachedSeries: SeriesMap | null = null;
 
-export async function loadBenchmarkTables(): Promise<Record<string, BenchTable>> {
-  if (cachedTables) return cachedTables;
+export async function loadBenchmarkSeries(): Promise<SeriesMap> {
+  if (cachedSeries) return cachedSeries;
 
-  const { data, error } = await supabase
-    .from('benchmark_data')
-    .select('index_code, days, xirr');
+  const map: SeriesMap = { N50: [], NLM: [], N500: [] };
+  const PAGE = 1000; // Supabase caps select at 1000 rows — page through
 
-  if (error || !data || data.length === 0) {
-    // Fall back to hardcoded tables
-    cachedTables = { N50: N50_FALLBACK, NLM: NLM_FALLBACK, N500: N500_FALLBACK };
-    return cachedTables;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('benchmark_prices')
+      .select('index_code, date, tri_close')
+      .order('date', { ascending: true })
+      .range(from, from + PAGE - 1);
+
+    if (error || !data || data.length === 0) break;
+    for (const row of data as BenchmarkPrice[]) {
+      const t = parseFlexibleDate(row.date);
+      if (t === null || !map[row.index_code]) continue;
+      map[row.index_code].push({ t, v: Number(row.tri_close) });
+    }
+    if (data.length < PAGE) break;
   }
 
-  const tables: Record<string, BenchTable> = { N50: {}, NLM: {}, N500: {}, DEBT: {} };
-  for (const row of data as BenchmarkEntry[]) {
-    if (!tables[row.index_code]) tables[row.index_code] = {};
-    tables[row.index_code][row.days] = Number(row.xirr);
+  for (const k of Object.keys(map) as BenchmarkIndex[]) {
+    map[k].sort((a, b) => a.t - b.t);
   }
-
-  // Fill missing tables with fallbacks
-  if (Object.keys(tables.N50).length === 0) tables.N50 = N50_FALLBACK;
-  if (Object.keys(tables.NLM).length === 0) tables.NLM = NLM_FALLBACK;
-  if (Object.keys(tables.N500).length === 0) tables.N500 = N500_FALLBACK;
-
-  cachedTables = tables;
-  return cachedTables;
+  cachedSeries = map;
+  return cachedSeries;
 }
 
 export function invalidateBenchmarkCache() {
-  cachedTables = null;
+  cachedSeries = null;
 }
 
-function closest(table: BenchTable, days: number): number {
-  const keys = Object.keys(table).map(Number).sort((a, b) => Math.abs(a - days) - Math.abs(b - days));
-  return keys.length > 0 ? table[keys[0]] : 8;
+/** TRI bar on `target` or the nearest prior trading day; first bar if target precedes the series. */
+function triOnOrBefore(series: Bar[], target: number): Bar | null {
+  if (series.length === 0) return null;
+  if (target <= series[0].t) return series[0];
+  let lo = 0;
+  let hi = series.length - 1;
+  let ans = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (series[mid].t <= target) {
+      ans = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return series[ans];
 }
 
-export function benchFromTables(tables: Record<string, BenchTable>, category: string, days: number): number {
+function indexForCategory(category: string): BenchmarkIndex | 'DEBT' {
   const c = category.toLowerCase();
-  if (/duration|debt|liquid|ultra short/.test(c)) return 5.8;
-  if (/small/.test(c)) return closest(tables['N500'] ?? N500_FALLBACK, days);
-  if (/mid/.test(c) && !/large/.test(c)) return closest(tables['NLM'] ?? NLM_FALLBACK, days);
-  return closest(tables['N50'] ?? N50_FALLBACK, days);
+  if (/duration|debt|liquid|ultra short/.test(c)) return 'DEBT';
+  if (/small/.test(c)) return 'N500';
+  if (/mid/.test(c) && !/large/.test(c)) return 'NLM';
+  return 'N50';
+}
+
+/**
+ * Benchmark XIRR (%) for a fund: the index return from the fund's start date
+ * (inv_date) to the latest date in the TRI series, computed via XIRR with the
+ * start TRI as a negative outflow and the end TRI as a positive inflow.
+ */
+export function benchXirrFromSeries(
+  seriesMap: SeriesMap,
+  category: string,
+  invDate: string
+): number {
+  const idx = indexForCategory(category ?? '');
+  if (idx === 'DEBT') return DEBT_RATE;
+
+  const series = seriesMap[idx] ?? [];
+  if (series.length === 0) return EQUITY_FALLBACK;
+
+  const start = parseFlexibleDate(invDate);
+  if (start === null) return EQUITY_FALLBACK;
+
+  const startBar = triOnOrBefore(series, start);
+  const endBar = series[series.length - 1];
+  if (!startBar || !endBar || startBar.t >= endBar.t || startBar.v <= 0) {
+    return EQUITY_FALLBACK;
+  }
+
+  const r = xirr([
+    { amount: -startBar.v, t: startBar.t },
+    { amount: endBar.v, t: endBar.t },
+  ]);
+  if (!isFinite(r)) return EQUITY_FALLBACK;
+  return Math.round(r * 100 * 100) / 100; // fraction → percent, 2dp
 }
 
 export function classify(alpha: number, days: number, thresholds: AlphaThresholds): SignalType {
@@ -93,12 +223,12 @@ export async function processRawFunds(
   raw: RawFundRecord[],
   thresholds: AlphaThresholds
 ): Promise<FundRecord[]> {
-  const tables = await loadBenchmarkTables();
+  const series = await loadBenchmarkSeries();
 
   return raw
     .filter((f) => f && typeof f.fund_xirr === 'number' && f.days)
     .map((f) => {
-      const bx = benchFromTables(tables, f.category ?? '', +f.days);
+      const bx = benchXirrFromSeries(series, f.category ?? '', f.inv_date ?? '');
       const alpha = Math.round((+f.fund_xirr - bx) * 100) / 100;
       const signal = classify(alpha, +f.days, thresholds);
       return {

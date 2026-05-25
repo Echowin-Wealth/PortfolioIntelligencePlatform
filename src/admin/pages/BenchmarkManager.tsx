@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Plus, Save, Trash2, UploadCloud, AlertTriangle } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { Plus, Trash2, UploadCloud, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/shared/supabaseClient';
-import { invalidateBenchmarkCache } from '@/shared/alphaEngine';
-import type { BenchmarkEntry } from '@/shared/types';
+import { invalidateBenchmarkCache, parseFlexibleDate } from '@/shared/alphaEngine';
+import type { BenchmarkIndex, BenchmarkPrice } from '@/shared/types';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,61 +23,108 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/shared/lib/utils';
 
-type IndexCode = 'N50' | 'NLM' | 'N500' | 'DEBT';
-const TABS: IndexCode[] = ['N50', 'NLM', 'N500', 'DEBT'];
-const TAB_LABELS: Record<IndexCode, string> = {
+type TabCode = BenchmarkIndex | 'DEBT';
+const TABS: TabCode[] = ['N50', 'NLM', 'N500', 'DEBT'];
+const TAB_LABELS: Record<TabCode, string> = {
   N50: 'Nifty 50 TRI',
   NLM: 'Nifty LargeMidcap 250 TRI',
   N500: 'Nifty 500 TRI',
   DEBT: 'CRISIL Debt (fixed 5.8%)',
 };
 
-function CSVImport({
+const CHUNK = 500;
+
+/** Convert a parsed date/value pair into a benchmark_prices row, or null to skip (e.g. header). */
+function toRow(active: BenchmarkIndex, dateCell: unknown, valCell: unknown): BenchmarkPrice | null {
+  const t =
+    dateCell instanceof Date
+      ? Date.UTC(dateCell.getUTCFullYear(), dateCell.getUTCMonth(), dateCell.getUTCDate())
+      : parseFlexibleDate(String(dateCell ?? ''));
+  if (t === null) return null;
+
+  const v =
+    typeof valCell === 'number' ? valCell : parseFloat(String(valCell ?? '').replace(/,/g, ''));
+  if (!isFinite(v)) return null;
+
+  return {
+    index_code: active,
+    date: new Date(t).toISOString().slice(0, 10),
+    tri_close: v,
+  };
+}
+
+function SeriesImport({
   active,
   onImport,
 }: {
-  active: IndexCode;
-  onImport: (rows: BenchmarkEntry[]) => void;
+  active: BenchmarkIndex;
+  onImport: (rows: BenchmarkPrice[]) => void;
 }) {
-  const [preview, setPreview] = useState<BenchmarkEntry[]>([]);
+  const [preview, setPreview] = useState<BenchmarkPrice[]>([]);
   const [error, setError] = useState('');
 
-  const onDrop = useCallback(
-    (files: File[]) => {
-      const file = files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const text = e.target?.result as string;
-          const lines = text.split('\n').filter((l) => l.trim());
-          const rows: BenchmarkEntry[] = [];
-          for (const line of lines) {
-            const [daysStr, xirrStr] = line.split(',').map((s) => s.trim());
-            const days = parseInt(daysStr, 10);
-            const xirr = parseFloat(xirrStr);
-            if (!isNaN(days) && !isNaN(xirr)) {
-              rows.push({ index_code: active, days, xirr });
-            }
-          }
-          if (rows.length === 0) throw new Error('No valid rows found (expected: days,xirr)');
-          setPreview(rows);
-          setError('');
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Parse error');
-          setPreview([]);
-        }
-      };
-      reader.readAsText(file);
+  const parseRows = useCallback(
+    (cells: [unknown, unknown][]): BenchmarkPrice[] => {
+      const rows: BenchmarkPrice[] = [];
+      for (const [d, v] of cells) {
+        const row = toRow(active, d, v);
+        if (row) rows.push(row);
+      }
+      return rows;
     },
     [active]
   );
 
+  const onDrop = useCallback(
+    async (files: File[]) => {
+      const file = files[0];
+      if (!file) return;
+      setError('');
+      try {
+        const isExcel = /\.xlsx?$/i.test(file.name);
+        let cells: [unknown, unknown][];
+        if (isExcel) {
+          const buf = await file.arrayBuffer();
+          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const grid = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: '' });
+          cells = grid.map((r) => [r[0], r[1]]);
+        } else {
+          const text = await file.text();
+          cells = text
+            .split(/\r?\n/)
+            .filter((l) => l.trim())
+            .map((line) => {
+              const parts = line.split(',');
+              return [parts[0]?.trim(), parts[1]?.trim()] as [unknown, unknown];
+            });
+        }
+        const rows = parseRows(cells);
+        if (rows.length === 0) {
+          throw new Error('No valid rows found (expected columns: Date, TRI Close)');
+        }
+        setPreview(rows);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Parse error');
+        setPreview([]);
+      }
+    },
+    [parseRows]
+  );
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'text/csv': ['.csv'], 'text/plain': ['.txt'] },
+    accept: {
+      'text/csv': ['.csv'],
+      'text/plain': ['.txt'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls'],
+    },
     multiple: false,
   });
+
+  const first = preview[0];
+  const last = preview[preview.length - 1];
 
   return (
     <div className="space-y-3">
@@ -92,11 +140,11 @@ function CSVImport({
         <input {...getInputProps()} />
         <UploadCloud className="mx-auto size-6 text-[var(--color-ink-soft)]" />
         <div className="mt-2 text-[13px] font-medium text-[var(--color-ink)]">
-          Drop a CSV file or click to browse
+          Drop an .xlsx or .csv file or click to browse
         </div>
         <div className="mt-1 font-mono text-[11px] text-[var(--color-ink-soft)]">
-          Format: <span className="text-[var(--color-brand-700)]">days,xirr</span> · one per line ·
-          no header
+          Columns: <span className="text-[var(--color-brand-700)]">Date, TRI Close</span> · a
+          header row is auto-skipped
         </div>
       </div>
 
@@ -106,11 +154,11 @@ function CSVImport({
         </Alert>
       )}
 
-      {preview.length > 0 && (
+      {preview.length > 0 && first && last && (
         <div className="space-y-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-surface-muted)] p-3">
           <div className="flex items-center justify-between">
             <span className="text-[12px] font-semibold text-[var(--color-success)]">
-              ✓ {preview.length} rows parsed
+              ✓ {preview.length} rows · {first.date} → {last.date}
             </span>
             <Button
               size="sm"
@@ -125,7 +173,7 @@ function CSVImport({
           <div className="max-h-32 overflow-auto rounded-lg bg-white p-3 font-mono text-[11.5px] text-[var(--color-ink-2)]">
             {preview.slice(0, 8).map((r, i) => (
               <div key={i}>
-                {r.days} days → {r.xirr}%
+                {r.date} → {r.tri_close}
               </div>
             ))}
             {preview.length > 8 && (
@@ -138,89 +186,133 @@ function CSVImport({
   );
 }
 
+interface SeriesSummary {
+  count: number;
+  first: string | null;
+  last: string | null;
+  latestValue: number | null;
+}
+
 export function BenchmarkManager() {
-  const [activeTab, setActiveTab] = useState<IndexCode>('N50');
-  const [rows, setRows] = useState<BenchmarkEntry[]>([]);
+  const [activeTab, setActiveTab] = useState<TabCode>('N50');
+  const [recent, setRecent] = useState<BenchmarkPrice[]>([]);
+  const [summary, setSummary] = useState<SeriesSummary>({
+    count: 0,
+    first: null,
+    last: null,
+    latestValue: null,
+  });
   const [loading, setLoading] = useState(true);
-  const [editValues, setEditValues] = useState<Record<string, string>>({});
-  const [newDays, setNewDays] = useState('');
-  const [newXirr, setNewXirr] = useState('');
+  const [newDate, setNewDate] = useState('');
+  const [newVal, setNewVal] = useState('');
 
-  async function loadRows(code: IndexCode) {
-    setLoading(true);
-    const { data } = await supabase
-      .from('benchmark_data')
-      .select('*')
-      .eq('index_code', code)
-      .order('days', { ascending: false });
-    setRows((data as BenchmarkEntry[]) ?? []);
-    setEditValues({});
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    loadRows(activeTab);
-  }, [activeTab]);
-
-  async function saveRow(row: BenchmarkEntry) {
-    const val = editValues[String(row.days)];
-    if (val === undefined) return;
-    const xirr = parseFloat(val);
-    if (isNaN(xirr)) {
-      toast.error('Invalid value');
+  const loadData = useCallback(async (code: TabCode) => {
+    if (code === 'DEBT') {
+      setLoading(false);
       return;
     }
-    const { error } = await supabase
-      .from('benchmark_data')
-      .update({ xirr, updated_at: new Date().toISOString() })
-      .eq('id', row.id ?? '');
-    if (error) toast.error('Save failed');
-    else {
-      toast.success('Saved');
-      invalidateBenchmarkCache();
-      loadRows(activeTab);
-    }
-  }
+    setLoading(true);
+    const [recentRes, countRes, earliestRes] = await Promise.all([
+      supabase
+        .from('benchmark_prices')
+        .select('*')
+        .eq('index_code', code)
+        .order('date', { ascending: false })
+        .limit(50),
+      supabase
+        .from('benchmark_prices')
+        .select('id', { count: 'exact', head: true })
+        .eq('index_code', code),
+      supabase
+        .from('benchmark_prices')
+        .select('date')
+        .eq('index_code', code)
+        .order('date', { ascending: true })
+        .limit(1),
+    ]);
+    const rows = (recentRes.data as BenchmarkPrice[]) ?? [];
+    setRecent(rows);
+    setSummary({
+      count: countRes.count ?? rows.length,
+      first: (earliestRes.data?.[0] as { date: string } | undefined)?.date ?? null,
+      last: rows[0]?.date ?? null,
+      latestValue: rows[0]?.tri_close ?? null,
+    });
+    setLoading(false);
+  }, []);
 
-  async function deleteRow(row: BenchmarkEntry) {
-    const { error } = await supabase.from('benchmark_data').delete().eq('id', row.id ?? '');
-    if (error) toast.error('Delete failed');
-    else {
-      toast.success('Deleted');
+  useEffect(() => {
+    loadData(activeTab);
+  }, [activeTab, loadData]);
+
+  async function handleImport(rows: BenchmarkPrice[]) {
+    if (activeTab === 'DEBT') return;
+    let imported = 0;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const chunk = rows.slice(i, i + CHUNK);
+      const { error } = await supabase
+        .from('benchmark_prices')
+        .upsert(chunk, { onConflict: 'index_code,date' });
+      if (error) {
+        toast.error(`Import failed after ${imported} rows`);
+        break;
+      }
+      imported += chunk.length;
+    }
+    if (imported > 0) {
+      toast.success(`Imported ${imported} rows`);
       invalidateBenchmarkCache();
-      loadRows(activeTab);
+      loadData(activeTab);
     }
   }
 
   async function addRow() {
-    const days = parseInt(newDays, 10);
-    const xirr = parseFloat(newXirr);
-    if (isNaN(days) || isNaN(xirr)) {
-      toast.error('Invalid days or xirr');
+    if (activeTab === 'DEBT') return;
+    const t = parseFlexibleDate(newDate);
+    const val = parseFloat(newVal);
+    if (t === null || isNaN(val)) {
+      toast.error('Invalid date or value');
       return;
     }
     const { error } = await supabase
-      .from('benchmark_data')
-      .upsert({ index_code: activeTab, days, xirr }, { onConflict: 'index_code,days' });
+      .from('benchmark_prices')
+      .upsert(
+        {
+          index_code: activeTab,
+          date: new Date(t).toISOString().slice(0, 10),
+          tri_close: val,
+        },
+        { onConflict: 'index_code,date' }
+      );
     if (error) toast.error('Failed to add');
     else {
       toast.success('Added');
-      setNewDays('');
-      setNewXirr('');
+      setNewDate('');
+      setNewVal('');
       invalidateBenchmarkCache();
-      loadRows(activeTab);
+      loadData(activeTab);
     }
   }
 
-  async function handleCSVImport(importRows: BenchmarkEntry[]) {
-    const { error } = await supabase
-      .from('benchmark_data')
-      .upsert(importRows, { onConflict: 'index_code,days' });
-    if (error) toast.error('Import failed');
+  async function deleteRow(row: BenchmarkPrice) {
+    const { error } = await supabase.from('benchmark_prices').delete().eq('id', row.id ?? '');
+    if (error) toast.error('Delete failed');
     else {
-      toast.success(`Imported ${importRows.length} rows`);
+      toast.success('Deleted');
       invalidateBenchmarkCache();
-      loadRows(activeTab);
+      loadData(activeTab);
+    }
+  }
+
+  async function clearAll() {
+    if (activeTab === 'DEBT') return;
+    if (!confirm(`Delete all TRI rows for ${activeTab}? This cannot be undone.`)) return;
+    const { error } = await supabase.from('benchmark_prices').delete().eq('index_code', activeTab);
+    if (error) toast.error('Clear failed');
+    else {
+      toast.success(`Cleared ${activeTab}`);
+      invalidateBenchmarkCache();
+      loadData(activeTab);
     }
   }
 
@@ -231,11 +323,12 @@ export function BenchmarkManager() {
           Benchmark manager
         </h1>
         <p className="mt-1 text-[14px] text-[var(--color-ink-muted)]">
-          XIRR tables used by the alpha engine for benchmark comparisons.
+          TRI price series used by the alpha engine. Benchmark XIRR is computed from each fund's
+          start date to the latest date in the series.
         </p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as IndexCode)}>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabCode)}>
         <TabsList>
           {TABS.map((t) => (
             <TabsTrigger key={t} value={t}>
@@ -254,7 +347,7 @@ export function BenchmarkManager() {
                 {t === 'DEBT' && (
                   <div className="mt-1 inline-flex items-center gap-1.5 text-[12px] text-[var(--color-warning)]">
                     <AlertTriangle className="size-3" />
-                    Fixed 5.8% — no table editable
+                    Fixed 5.8% — no TRI series
                   </div>
                 )}
               </div>
@@ -266,29 +359,44 @@ export function BenchmarkManager() {
                 <Card className="overflow-hidden">
                   <div className="flex flex-col gap-3 border-b border-[var(--color-line)] px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="text-[14px] font-semibold text-[var(--color-ink)]">
-                      XIRR table
+                      TRI series
                       <span className="ml-2 font-mono text-[12px] text-[var(--color-ink-soft)]">
-                        {rows.length} entries
+                        {summary.count} rows
+                        {summary.first && summary.last
+                          ? ` · ${summary.first} → ${summary.last}`
+                          : ''}
+                        {summary.latestValue != null
+                          ? ` · latest ${summary.latestValue}`
+                          : ''}
                       </span>
                     </div>
                     <div className="flex gap-2">
                       <Input
-                        type="number"
-                        placeholder="Days"
-                        value={newDays}
-                        onChange={(e) => setNewDays(e.target.value)}
-                        className="h-9 w-24"
+                        type="date"
+                        placeholder="Date"
+                        value={newDate}
+                        onChange={(e) => setNewDate(e.target.value)}
+                        className="h-9 w-40"
                       />
                       <Input
                         type="number"
                         step="0.01"
-                        placeholder="XIRR %"
-                        value={newXirr}
-                        onChange={(e) => setNewXirr(e.target.value)}
-                        className="h-9 w-24"
+                        placeholder="TRI Close"
+                        value={newVal}
+                        onChange={(e) => setNewVal(e.target.value)}
+                        className="h-9 w-28"
                       />
                       <Button size="sm" onClick={addRow}>
                         <Plus className="size-3.5" /> Add
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"
+                        onClick={clearAll}
+                        disabled={summary.count === 0}
+                      >
+                        <Trash2 className="size-3.5" /> Clear all
                       </Button>
                     </div>
                   </div>
@@ -300,48 +408,26 @@ export function BenchmarkManager() {
                       ))}
                     </div>
                   ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Days held</TableHead>
-                          <TableHead className="text-right">XIRR %</TableHead>
-                          <TableHead>Last updated</TableHead>
-                          <TableHead style={{ width: 160 }}>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {rows.map((r) => (
-                          <TableRow key={r.days}>
-                            <TableCell className="font-mono text-[var(--color-brand-700)]">
-                              {r.days}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <input
-                                type="number"
-                                step="0.01"
-                                defaultValue={r.xirr}
-                                onChange={(e) =>
-                                  setEditValues((p) => ({ ...p, [String(r.days)]: e.target.value }))
-                                }
-                                className="w-20 rounded-md border border-[var(--color-line)] bg-white px-2 py-1 text-right font-mono text-[12px] text-[var(--color-ink)] transition-colors focus:border-[var(--color-brand-500)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-500)]/20"
-                              />
-                              <span className="ml-1 text-[var(--color-ink-soft)]">%</span>
-                            </TableCell>
-                            <TableCell className="text-[var(--color-ink-soft)]">
-                              {r.updated_at
-                                ? new Date(r.updated_at).toLocaleDateString('en-IN')
-                                : '—'}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => saveRow(r)}
-                                  disabled={editValues[String(r.days)] === undefined}
-                                >
-                                  <Save className="size-3" /> Save
-                                </Button>
+                    <>
+                      <div className="px-6 pt-3 text-[12px] text-[var(--color-ink-soft)]">
+                        Showing the {Math.min(recent.length, 50)} most recent rows.
+                      </div>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead className="text-right">TRI Close</TableHead>
+                            <TableHead style={{ width: 80 }}>Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {recent.map((r) => (
+                            <TableRow key={r.id ?? r.date}>
+                              <TableCell className="font-mono text-[var(--color-brand-700)]">
+                                {r.date}
+                              </TableCell>
+                              <TableCell className="text-right font-mono">{r.tri_close}</TableCell>
+                              <TableCell>
                                 <Button
                                   size="sm"
                                   variant="ghost"
@@ -350,31 +436,31 @@ export function BenchmarkManager() {
                                 >
                                   <Trash2 className="size-3" />
                                 </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        {rows.length === 0 && (
-                          <TableRow>
-                            <TableCell
-                              colSpan={4}
-                              className="py-10 text-center text-[var(--color-ink-soft)]"
-                            >
-                              No data yet. Import a CSV or add rows above.
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {recent.length === 0 && (
+                            <TableRow>
+                              <TableCell
+                                colSpan={3}
+                                className="py-10 text-center text-[var(--color-ink-soft)]"
+                              >
+                                No data yet. Import an .xlsx/.csv or add rows above.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </>
                   )}
                 </Card>
 
                 <Card className="overflow-hidden">
                   <div className="border-b border-[var(--color-line)] px-6 py-4 text-[14px] font-semibold text-[var(--color-ink)]">
-                    CSV import
+                    Import TRI series
                   </div>
                   <div className="p-6">
-                    <CSVImport active={activeTab} onImport={handleCSVImport} />
+                    <SeriesImport active={activeTab as BenchmarkIndex} onImport={handleImport} />
                   </div>
                 </Card>
               </>
