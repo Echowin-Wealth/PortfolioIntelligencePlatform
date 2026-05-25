@@ -9,7 +9,7 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import { extractText } from '@/shared/pdfExtract';
+import { extractFileText } from '@/shared/fileExtract';
 import { processRawFunds } from '@/shared/alphaEngine';
 import { generatePDF } from '@/shared/pdfReport';
 import type { FundRecord, RawFundRecord, AlphaThresholds, SignalType } from '@/shared/types';
@@ -65,7 +65,12 @@ export function GenerateReport() {
     onDrop: (files) => {
       if (files[0]) setFile(files[0]);
     },
-    accept: { 'application/pdf': ['.pdf'] },
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls'],
+      'text/csv': ['.csv'],
+    },
     multiple: false,
   });
 
@@ -74,12 +79,12 @@ export function GenerateReport() {
     setLoading(true);
     setError('');
     setProgress(8);
-    setProgressMsg('Reading PDF…');
+    setProgressMsg('Reading statement…');
 
     try {
-      const text = await extractText(file);
+      const text = await extractFileText(file);
       setProgress(28);
-      setProgressMsg('Claude is reading the PDF…');
+      setProgressMsg('Claude is reading the statement…');
 
       const res = await fetch(EDGE_FUNCTION_URL, {
         method: 'POST',
@@ -160,7 +165,7 @@ export function GenerateReport() {
             Generate report
           </h1>
           <p className="mt-1 text-[14px] text-[var(--color-ink-muted)]">
-            Upload a PDF, tune thresholds, and export a branded alpha report.
+            Upload a PDF or Excel file, tune thresholds, and export a branded alpha report.
           </p>
         </div>
         {funds.length > 0 && (
@@ -188,7 +193,7 @@ export function GenerateReport() {
         <div className="space-y-5">
           <Card className="overflow-hidden">
             <div className="border-b border-[var(--color-line)] px-5 py-3.5 text-[13px] font-semibold text-[var(--color-ink)]">
-              Upload PDF
+              Upload statement
             </div>
             <div className="p-5">
               {!file ? (
@@ -204,7 +209,7 @@ export function GenerateReport() {
                   <input {...getInputProps()} />
                   <UploadCloud className="mx-auto size-7 text-[var(--color-ink-soft)]" />
                   <div className="mt-2.5 text-[13.5px] font-medium text-[var(--color-ink)]">
-                    Drop Echowin Wealth PDF
+                    Drop Echowin Wealth PDF or Excel
                   </div>
                   <div className="mt-1 text-[12px] text-[var(--color-ink-soft)]">
                     or click to browse
@@ -246,7 +251,7 @@ export function GenerateReport() {
                   id="inv"
                   value={invNameOverride}
                   onChange={(e) => setInvNameOverride(e.target.value)}
-                  placeholder="Auto-detected from PDF"
+                  placeholder="Auto-detected from statement"
                 />
               </div>
               <div className="space-y-1.5">
@@ -440,7 +445,7 @@ export function GenerateReport() {
                 Ready when you are
               </div>
               <div className="mt-1 text-[13px] text-[var(--color-ink-soft)]">
-                Upload a PDF on the left and click <strong>Generate report</strong> to see results.
+                Upload a PDF or Excel file on the left and click <strong>Generate report</strong> to see results.
               </div>
             </div>
           </Card>

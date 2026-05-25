@@ -111,7 +111,7 @@ export function AnalyzeSection(props: AnalyzeSectionProps) {
                     </h3>
                   </div>
                   <p className="mt-1 text-[13px] text-[var(--color-ink-muted)]">
-                    Echowin PDF format · individual or family reports
+                    Echowin PDF or Excel format · individual or family reports
                   </p>
                 </div>
                 <span className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-[var(--color-brand-50)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-brand-700)] ring-1 ring-inset ring-[var(--color-brand-100)]">
@@ -169,7 +169,7 @@ export function AnalyzeSection(props: AnalyzeSectionProps) {
             </Card>
 
             <p className="mt-5 text-center text-[12px] text-[var(--color-ink-soft)]">
-              Your PDF is parsed locally · only fund metadata is analyzed · nothing is stored
+              Your file is parsed locally · only fund metadata is analyzed · nothing is stored
             </p>
           </div>
         ) : (

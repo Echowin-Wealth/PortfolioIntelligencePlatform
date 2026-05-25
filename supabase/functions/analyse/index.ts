@@ -55,7 +55,7 @@ serve(async (req: Request) => {
 
   const text = body.text ?? '';
   if (!text || text.length < 100) {
-    return jsonResponse({ error: 'No usable PDF text provided' }, 400);
+    return jsonResponse({ error: 'No usable statement text provided' }, 400);
   }
 
   // ── Authenticate user (skipped for admin-token requests from /admin/generate)
@@ -102,13 +102,13 @@ serve(async (req: Request) => {
   }
 
   // ── Call Anthropic ────────────────────────────────────────────────────────
-  const extractionPrompt = `You are an expert mutual fund analyst. Extract ALL fund positions from this Echowin Wealth Report PDF text.
+  const extractionPrompt = `You are an expert mutual fund analyst. Extract ALL fund positions from this Echowin Wealth Report. The text may come from a PDF or from an exported Excel/CSV spreadsheet (rows of comma-separated values, grouped under "Sheet:" headers).
 
 Return a JSON array where each item has:
 - name: Full fund name (e.g. "Kotak Mid Cap Fund Growth")
 - category: Fund category (e.g. "Equity - Mid Cap Fund", "Debt - Low Duration Fund", "Hybrid - Aggressive Hybrid Fund", "FOF - Domestic", "Equity - Large & Mid Cap Fund")
 - inv_date: Investment date as shown (e.g. "14-Jun-23", "03-Jan-25")
-- days: Number of days held as integer (from "(NNN Days)" in PDF)
+- days: Number of days held as integer (from "(NNN Days)" or a days/holding-period column)
 - fund_xirr: XIRR as a number (e.g. 15.49, -7.05). This is the LAST percentage in each fund's row.
 - investor_name: The client/investor name for this section
 
@@ -119,7 +119,7 @@ Rules:
 4. If same fund appears multiple times (different folios/dates), include each separately
 5. Return ONLY valid JSON array — no markdown, no explanation
 
-PDF TEXT:
+STATEMENT TEXT:
 ${text.substring(0, 90000)}`;
 
   type AnthropicData = {

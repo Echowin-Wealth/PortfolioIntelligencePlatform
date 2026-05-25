@@ -19,7 +19,12 @@ export function UploadZone({ file, onFile, onClear }: UploadZoneProps) {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'application/pdf': ['.pdf'] },
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls'],
+      'text/csv': ['.csv'],
+    },
     multiple: false,
     maxSize: 50 * 1024 * 1024,
   });
@@ -80,7 +85,7 @@ export function UploadZone({ file, onFile, onClear }: UploadZoneProps) {
         or click anywhere in this card to browse
       </p>
       <div className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-[11.5px] text-[var(--color-ink-soft)] ring-1 ring-inset ring-[var(--color-line)]">
-        PDF · up to 50 MB · parsed locally in your browser
+        PDF or Excel · up to 50 MB · parsed locally in your browser
       </div>
     </div>
   );

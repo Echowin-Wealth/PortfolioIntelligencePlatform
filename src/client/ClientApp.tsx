@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { extractText } from '@/shared/pdfExtract';
+import { extractFileText } from '@/shared/fileExtract';
 import { processRawFunds } from '@/shared/alphaEngine';
 import { supabase } from '@/shared/supabaseClient';
 import { useAuth } from '@/shared/hooks/useAuth';
@@ -110,11 +110,11 @@ export function ClientApp() {
     setError('');
     setRateLimited(false);
     setProgress(5);
-    setProgressMsg('Reading PDF…');
+    setProgressMsg('Reading statement…');
     setStep(2);
 
     try {
-      const text = await extractText(file);
+      const text = await extractFileText(file);
       setProgress(30);
       setProgressMsg('Analysing with AI…');
 
