@@ -72,16 +72,6 @@ serve(async (req: Request) => {
     }
     userId = userResp.user.id;
 
-    // Require a verified phone before any LLM spend.
-    const { data: profile, error: profileErr } = await supabase
-      .from('profiles')
-      .select('phone_verified')
-      .eq('id', userId)
-      .maybeSingle();
-    if (profileErr || !profile?.phone_verified) {
-      return jsonResponse({ error: 'phone_unverified' }, 403);
-    }
-
     // Per-user daily limit: count rows already created today for this user.
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);

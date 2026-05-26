@@ -21,7 +21,7 @@ export interface RawFundRecord {
   investor_name?: string;
 }
 
-export type BenchmarkIndex = 'N50' | 'NLM' | 'N500';
+export type BenchmarkIndex = 'N50' | 'NLM' | 'N500' | 'DEBT';
 
 export interface BenchmarkPrice {
   id?: string;
@@ -34,7 +34,7 @@ export interface BenchmarkPrice {
 export interface CategoryMapping {
   id?: string;
   category: string;
-  benchmark: 'N50' | 'NLM' | 'N500' | 'DEBT';
+  benchmark: BenchmarkIndex;
   keywords: string[];
 }
 

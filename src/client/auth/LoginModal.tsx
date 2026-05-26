@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type SyntheticEvent } from 'react';
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { supabase } from '@/shared/supabaseClient';
 import {
@@ -9,12 +9,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 type LoginModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
+
+type Mode = 'signin' | 'signup';
 
 function GoogleGlyph() {
   return (
@@ -28,12 +32,25 @@ function GoogleGlyph() {
 }
 
 export function LoginModal({ open, onOpenChange }: LoginModalProps) {
-  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<Mode>('signin');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  function switchMode(next: Mode) {
+    setMode(next);
+    setError('');
+    setNotice('');
+  }
 
   async function signInWithGoogle() {
-    setLoading(true);
+    setGoogleLoading(true);
     setError('');
+    setNotice('');
     // OAuth 2.0 disallows URL fragments in redirect_uri (RFC 6749 §3.1.2),
     // and our app uses hash anchors like #analyze — so strip everything past
     // the path. Whatever URL we use here must ALSO be whitelisted under
@@ -45,27 +62,87 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
     });
     // Log so users can see what's happening in DevTools when the provider
     // isn't configured or the redirect URI isn't whitelisted.
-    // eslint-disable-next-line no-console
     console.log('[google-oauth]', { data, error: authError, redirectTo });
     if (authError) {
       setError(authError.message);
-      setLoading(false);
+      setGoogleLoading(false);
       return;
     }
     // If supabase-js returned without redirecting, surface that so the user
     // isn't left staring at an unresponsive button.
     setTimeout(() => {
       if (document.visibilityState === 'visible') {
-        setLoading(false);
+        setGoogleLoading(false);
       }
     }, 4000);
+  }
+
+  async function submitEmail(e: SyntheticEvent) {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password) {
+      setError('Enter your email and password.');
+      return;
+    }
+    if (mode === 'signup' && password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (mode === 'signup' && !name.trim()) {
+      setError('Enter your name.');
+      return;
+    }
+
+    setEmailLoading(true);
+
+    if (mode === 'signup') {
+      const { data, error: signUpErr } = await supabase.auth.signUp({
+        email: trimmedEmail,
+        password,
+        // The handle_new_user() trigger reads full_name from user metadata to
+        // populate profiles.name on signup.
+        options: { data: { full_name: name.trim() } },
+      });
+      setEmailLoading(false);
+      if (signUpErr) {
+        setError(signUpErr.message);
+        return;
+      }
+      // When email confirmation is enabled, signUp returns no session until the
+      // user clicks the link in their inbox.
+      if (!data.session) {
+        setNotice('Check your inbox to confirm your email, then sign in.');
+        setMode('signin');
+        setPassword('');
+        return;
+      }
+      // Session already active — onAuthStateChange will resume the flow.
+      onOpenChange(false);
+      return;
+    }
+
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email: trimmedEmail,
+      password,
+    });
+    setEmailLoading(false);
+    if (signInErr) {
+      setError(signInErr.message);
+      return;
+    }
+    onOpenChange(false);
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Sign in to analyze your report</DialogTitle>
+          <DialogTitle>
+            {mode === 'signin' ? 'Sign in to analyze your report' : 'Create your account'}
+          </DialogTitle>
           <DialogDescription>
             We need to verify it's you so your report history stays in your
             account. We'll never share your details.
@@ -79,21 +156,115 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
             variant="outline"
             className="w-full gap-2"
             onClick={signInWithGoogle}
-            disabled={loading}
+            disabled={googleLoading || emailLoading}
           >
-            {loading ? <Loader2 className="size-4 animate-spin" /> : <GoogleGlyph />}
-            {loading ? 'Redirecting…' : 'Continue with Google'}
+            {googleLoading ? <Loader2 className="size-4 animate-spin" /> : <GoogleGlyph />}
+            {googleLoading ? 'Redirecting…' : 'Continue with Google'}
           </Button>
 
-          {error && (
-            <Alert variant="danger">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+          <div className="flex items-center gap-3">
+            <span className="h-px flex-1 bg-[var(--color-line)]" />
+            <span className="text-[12px] text-[var(--color-ink-soft)]">or</span>
+            <span className="h-px flex-1 bg-[var(--color-line)]" />
+          </div>
+
+          <form onSubmit={submitEmail} className="space-y-3">
+            {mode === 'signup' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="name">Name</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoComplete="name"
+                  required
+                />
+              </div>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                required
+              />
+            </div>
+
+            {error && (
+              <Alert variant="danger">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {notice && (
+              <Alert>
+                <AlertDescription>{notice}</AlertDescription>
+              </Alert>
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              disabled={emailLoading || googleLoading}
+            >
+              {emailLoading ? <Loader2 className="size-4 animate-spin" /> : null}
+              {emailLoading
+                ? mode === 'signin'
+                  ? 'Signing in…'
+                  : 'Creating account…'
+                : mode === 'signin'
+                  ? 'Sign in'
+                  : 'Sign up'}
+            </Button>
+          </form>
+
+          <p className="text-center text-[13px] text-[var(--color-ink-muted)]">
+            {mode === 'signin' ? (
+              <>
+                New here?{' '}
+                <button
+                  type="button"
+                  onClick={() => switchMode('signup')}
+                  className="font-medium text-[var(--color-brand-600)] hover:underline"
+                >
+                  Create an account
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => switchMode('signin')}
+                  className="font-medium text-[var(--color-brand-600)] hover:underline"
+                >
+                  Sign in
+                </button>
+              </>
+            )}
+          </p>
 
           <p className="flex items-center justify-center gap-1.5 text-[12px] text-[var(--color-ink-soft)]">
             <ShieldCheck className="size-3.5 text-[var(--color-success)]" />
-            One-time phone verification follows.
+            Your details stay private.
           </p>
         </div>
       </DialogContent>

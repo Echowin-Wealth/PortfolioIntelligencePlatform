@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Plus, Save, Trash2, X, Info } from 'lucide-react';
 import { supabase } from '@/shared/supabaseClient';
+import { invalidateCategoryCache } from '@/shared/alphaEngine';
 import type { CategoryMapping as CategoryMappingType } from '@/shared/types';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from '@/components/ui/sonner';
@@ -18,7 +20,7 @@ const BENCH_OPTIONS: { code: BenchCode; name: string; desc: string }[] = [
   { code: 'N50', name: 'Nifty 50 TRI', desc: 'Large cap, flexi cap, hybrid, FOF, sectoral' },
   { code: 'NLM', name: 'Nifty LargeMidcap 250 TRI', desc: 'Large & mid cap, mid cap funds' },
   { code: 'N500', name: 'Nifty 500 TRI', desc: 'Small cap funds' },
-  { code: 'DEBT', name: 'CRISIL 5.8% (fixed)', desc: 'Debt, liquid, ultra-short, money market' },
+  { code: 'DEBT', name: 'Debt TRI', desc: 'Debt, liquid, ultra-short, money market' },
 ];
 
 const benchVariant: Record<BenchCode, 'success' | 'info' | 'brand' | 'warning'> = {
@@ -28,6 +30,19 @@ const benchVariant: Record<BenchCode, 'success' | 'info' | 'brand' | 'warning'> 
   DEBT: 'warning',
 };
 
+const GROUPS = ['Debt', 'Hybrid', 'Equity', 'Others'] as const;
+type Group = (typeof GROUPS)[number];
+
+// Categories are named "<Group> - <Name>" (e.g. "Debt - Gilt Fund"); anything
+// that doesn't start with a known group prefix falls under "Others".
+function groupOf(category: string): Group {
+  const c = category.trim().toLowerCase();
+  if (c.startsWith('debt')) return 'Debt';
+  if (c.startsWith('hybrid')) return 'Hybrid';
+  if (c.startsWith('equity')) return 'Equity';
+  return 'Others';
+}
+
 export function CategoryMapping() {
   const [mappings, setMappings] = useState<CategoryMappingType[]>([]);
   const [selected, setSelected] = useState<CategoryMappingType | null>(null);
@@ -35,6 +50,13 @@ export function CategoryMapping() {
   const [saving, setSaving] = useState(false);
   const [newKeyword, setNewKeyword] = useState('');
   const [newCategory, setNewCategory] = useState('');
+  const [group, setGroup] = useState<Group>('Debt');
+
+  const counts = GROUPS.reduce(
+    (acc, g) => ({ ...acc, [g]: mappings.filter((m) => groupOf(m.category) === g).length }),
+    {} as Record<Group, number>
+  );
+  const visible = mappings.filter((m) => groupOf(m.category) === group);
 
   async function load() {
     const { data } = await supabase.from('category_mappings').select('*').order('category');
@@ -65,6 +87,7 @@ export function CategoryMapping() {
     if (error) toast.error('Save failed');
     else {
       toast.success('Saved');
+      invalidateCategoryCache();
       await load();
     }
     setSaving(false);
@@ -75,6 +98,7 @@ export function CategoryMapping() {
     if (error) toast.error('Delete failed');
     else {
       toast.success('Deleted');
+      invalidateCategoryCache();
       setSelected(null);
       await load();
     }
@@ -95,8 +119,13 @@ export function CategoryMapping() {
   }
 
   function addNewCategory() {
-    if (!newCategory.trim()) return;
-    setSelected({ category: newCategory.trim(), benchmark: 'N50', keywords: [] });
+    const name = newCategory.trim();
+    if (!name) return;
+    // Land the new category in the active tab by prefixing its group, unless the
+    // admin already typed a "Group - …" name or is on the Others tab.
+    const category =
+      group !== 'Others' && !name.includes(' - ') ? `${group} - ${name}` : name;
+    setSelected({ category, benchmark: group === 'Debt' ? 'DEBT' : 'N50', keywords: [] });
     setNewCategory('');
   }
 
@@ -113,9 +142,22 @@ export function CategoryMapping() {
 
       <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
         <div className="space-y-3">
+          <Tabs value={group} onValueChange={(v) => setGroup(v as Group)}>
+            <TabsList className="flex w-full">
+              {GROUPS.map((g) => (
+                <TabsTrigger key={g} value={g} className="min-w-0 flex-1 gap-1 px-2 text-[12px]">
+                  <span className="truncate">{g}</span>
+                  <span className="text-[10px] text-[var(--color-ink-faint)]">
+                    {counts[g]}
+                  </span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+
           <Card className="overflow-hidden">
             <div className="border-b border-[var(--color-line)] px-4 py-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-ink-soft)]">
-              Fund categories ({mappings.length})
+              {group} categories ({visible.length})
             </div>
             <div className="max-h-[480px] overflow-y-auto">
               {loading ? (
@@ -124,8 +166,12 @@ export function CategoryMapping() {
                     <Skeleton key={i} className="h-9" />
                   ))}
                 </div>
+              ) : visible.length === 0 ? (
+                <div className="px-4 py-10 text-center text-[13px] text-[var(--color-ink-soft)]">
+                  No {group.toLowerCase()} categories yet.
+                </div>
               ) : (
-                mappings.map((m) => (
+                visible.map((m) => (
                   <button
                     key={m.id}
                     type="button"
@@ -147,7 +193,7 @@ export function CategoryMapping() {
 
           <div className="flex gap-2">
             <Input
-              placeholder="New category name"
+              placeholder={group === 'Others' ? 'New category name' : `New ${group} category`}
               value={newCategory}
               onChange={(e) => setNewCategory(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && addNewCategory()}

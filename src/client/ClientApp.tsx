@@ -3,7 +3,6 @@ import { extractText } from '@/shared/pdfExtract';
 import { processRawFunds } from '@/shared/alphaEngine';
 import { supabase } from '@/shared/supabaseClient';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { useProfile } from '@/shared/profile';
 import type { FundRecord, AlphaThresholds, RawFundRecord } from '@/shared/types';
 import { DEFAULT_THRESHOLDS } from '@/shared/types';
 
@@ -18,7 +17,6 @@ import { FAQ } from './sections/FAQ';
 import { CtaStrip } from './sections/CtaStrip';
 import { Footer } from './sections/Footer';
 import { LoginModal } from './auth/LoginModal';
-import { PhoneOtpModal } from './auth/PhoneOtpModal';
 import { toast } from '@/components/ui/sonner';
 
 const EDGE_FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyse`;
@@ -30,7 +28,6 @@ type Step = 1 | 2 | 3;
 
 export function ClientApp() {
   const { session, loading: authLoading } = useAuth();
-  const { profile, loading: profileLoading, refresh: refreshProfile } = useProfile();
 
   const [file, setFile] = useState<File | null>(null);
   const [step, setStep] = useState<Step>(1);
@@ -44,7 +41,6 @@ export function ClientApp() {
 
   // Auth gating
   const [loginOpen, setLoginOpen] = useState(false);
-  const [otpOpen, setOtpOpen] = useState(false);
 
   const thresholds: AlphaThresholds = DEFAULT_THRESHOLDS;
   const distributorName = 'Echowin Wealth Private Limited';
@@ -69,40 +65,28 @@ export function ClientApp() {
   }, []);
 
   // After the Google OAuth redirect we land back here with a fresh page. The
-  // React `file` state is gone, so we can't auto-resume the analysis. Instead:
-  //  - if phone isn't verified yet, open the OTP modal automatically
-  //  - once everything is set, prompt the user to pick their PDF again
+  // React `file` state is gone, so we can't auto-resume the analysis — once the
+  // user is signed in, prompt them to pick their PDF again.
   useEffect(() => {
-    if (authLoading || profileLoading) return;
+    if (authLoading) return;
     if (typeof window === 'undefined') return;
     const intent = window.sessionStorage.getItem(ANALYZE_INTENT_KEY);
     if (!intent || !session) return;
-
-    if (!profile?.phone_verified) {
-      setOtpOpen(true);
-      return;
-    }
 
     window.sessionStorage.removeItem(ANALYZE_INTENT_KEY);
     toast.success("You're all set — choose your PDF and click Analyze.");
     setTimeout(() => {
       document.getElementById('analyze')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 50);
-  }, [authLoading, profileLoading, session, profile?.phone_verified]);
+  }, [authLoading, session]);
 
   async function generate() {
     if (!file) return;
 
-    // Gate 1: signed in?
+    // Gate: signed in?
     if (!session) {
       window.sessionStorage.setItem(ANALYZE_INTENT_KEY, '1');
       setLoginOpen(true);
-      return;
-    }
-    // Gate 2: phone verified?
-    if (!profile?.phone_verified) {
-      window.sessionStorage.setItem(ANALYZE_INTENT_KEY, '1');
-      setOtpOpen(true);
       return;
     }
 
@@ -130,13 +114,6 @@ export function ClientApp() {
 
       if (res.status === 401 || res.status === 403) {
         const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-        if (body.error === 'phone_unverified') {
-          setOtpOpen(true);
-          setStep(1);
-          setProgress(0);
-          setProgressMsg('');
-          return;
-        }
         throw new Error((body.error as string) ?? 'Please sign in again.');
       }
 
@@ -207,7 +184,7 @@ export function ClientApp() {
 
   return (
     <div className="bg-white text-[var(--color-ink)]">
-      <TopNav />
+      <TopNav onLogin={() => setLoginOpen(true)} />
       <main>
         <Hero />
         <AnalyzeSection
@@ -237,26 +214,6 @@ export function ClientApp() {
       <Footer />
 
       <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
-      {session && (
-        <PhoneOtpModal
-          open={otpOpen}
-          onOpenChange={(v) => {
-            setOtpOpen(v);
-            // Cancelling the OTP modal abandons the analyze intent.
-            if (!v) window.sessionStorage.removeItem(ANALYZE_INTENT_KEY);
-          }}
-          userId={session.user.id}
-          onVerified={async () => {
-            await refreshProfile();
-            setOtpOpen(false);
-            window.sessionStorage.removeItem(ANALYZE_INTENT_KEY);
-            toast.success("Phone verified — choose your PDF and click Analyze.");
-            setTimeout(() => {
-              document.getElementById('analyze')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 50);
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -39,28 +39,39 @@ export async function updateProfile(
 
 export function useProfile() {
   const { session, loading: authLoading } = useAuth();
+  const userId = session?.user?.id ?? null;
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Which user the loaded profile belongs to. While this lags behind the
+  // current session user, we must report `loading` so consumers don't treat a
+  // not-yet-fetched profile as "no profile" — otherwise an admin signing in
+  // gets routed to "/" before their is_admin flag has even been fetched.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!session?.user) {
+    if (!userId) {
       setProfile(null);
-      setLoading(false);
+      setLoadedFor(null);
       return;
     }
-    setLoading(true);
     try {
-      const p = await fetchProfile(session.user.id);
+      const p = await fetchProfile(userId);
       setProfile(p);
+    } catch {
+      setProfile(null);
     } finally {
-      setLoading(false);
+      // Mark resolved for this user even on error, so we never get stuck in a
+      // permanent loading state.
+      setLoadedFor(userId);
     }
-  }, [session?.user]);
+  }, [userId]);
 
   useEffect(() => {
     if (authLoading) return;
     void refresh();
   }, [authLoading, refresh]);
 
-  return { profile, loading: authLoading || loading, refresh };
+  // Loading until the profile we hold matches the current signed-in user.
+  const loading = authLoading || (userId !== null && loadedFor !== userId);
+
+  return { profile, loading, refresh };
 }

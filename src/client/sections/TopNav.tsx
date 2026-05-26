@@ -15,7 +15,11 @@ const links = [
   { label: 'FAQ', href: '#faq' },
 ];
 
-export function TopNav() {
+type TopNavProps = {
+  onLogin: () => void;
+};
+
+export function TopNav({ onLogin }: TopNavProps) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const { session, signOut } = useAuth();
@@ -71,12 +75,13 @@ export function TopNav() {
               </button>
             </>
           ) : (
-            <Link
-              to="/admin"
+            <button
+              type="button"
+              onClick={onLogin}
               className="text-[13.5px] font-medium text-[var(--color-ink-muted)] hover:text-[var(--color-ink)] transition-colors px-3"
             >
-              Admin
-            </Link>
+              Login
+            </button>
           )}
           <Button asChild size="sm" className="h-9">
             <a href="#analyze">
@@ -128,13 +133,16 @@ export function TopNav() {
                 </button>
               </>
             ) : (
-              <Link
-                to="/admin"
-                onClick={() => setOpen(false)}
-                className="rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-surface-muted)]"
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onLogin();
+                }}
+                className="rounded-lg px-3 py-2.5 text-left text-sm font-medium text-[var(--color-ink-2)] hover:bg-[var(--color-surface-muted)]"
               >
-                Admin
-              </Link>
+                Login
+              </button>
             )}
             <Button asChild className="mt-2">
               <a href="#analyze" onClick={() => setOpen(false)}>

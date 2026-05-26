@@ -8,8 +8,9 @@ import type {
   AlphaThresholds,
 } from './types';
 
-// DEBT has no TRI series — it stays a fixed annualised rate.
-const DEBT_RATE = 5.8;
+// Used only when the DEBT index has no TRI series uploaded yet, so the product
+// keeps working until benchmark data is loaded.
+const DEBT_FALLBACK = 5.8;
 // Used only when an equity index has no TRI series uploaded yet, so the product
 // keeps working until benchmark data is loaded.
 const EQUITY_FALLBACK = 12;
@@ -120,7 +121,7 @@ let cachedSeries: SeriesMap | null = null;
 export async function loadBenchmarkSeries(): Promise<SeriesMap> {
   if (cachedSeries) return cachedSeries;
 
-  const map: SeriesMap = { N50: [], NLM: [], N500: [] };
+  const map: SeriesMap = { N50: [], NLM: [], N500: [], DEBT: [] };
   const PAGE = 1000; // Supabase caps select at 1000 rows — page through
 
   for (let from = 0; ; from += PAGE) {
@@ -150,6 +151,37 @@ export function invalidateBenchmarkCache() {
   cachedSeries = null;
 }
 
+// ── Category → benchmark mappings (admin-managed) ───────────────────────────
+// Loaded from the `category_mappings` table the admin Category Mapping page
+// edits, so admins control classification without a code change. The hardcoded
+// regex below stays as a fallback when no keyword matches (or the table is
+// empty/unreachable), keeping the product working before any seeding.
+interface CategoryRule {
+  benchmark: BenchmarkIndex;
+  keywords: string[]; // lowercased
+}
+
+let cachedCatRules: CategoryRule[] | null = null;
+
+export async function loadCategoryMappings(): Promise<CategoryRule[]> {
+  if (cachedCatRules) return cachedCatRules;
+  const { data, error } = await supabase
+    .from('category_mappings')
+    .select('benchmark, keywords');
+  cachedCatRules =
+    error || !data
+      ? []
+      : (data as { benchmark: BenchmarkIndex; keywords: string[] }[]).map((m) => ({
+          benchmark: m.benchmark,
+          keywords: (m.keywords ?? []).map((k) => k.toLowerCase()),
+        }));
+  return cachedCatRules;
+}
+
+export function invalidateCategoryCache() {
+  cachedCatRules = null;
+}
+
 /** TRI bar on `target` or the nearest prior trading day; first bar if target precedes the series. */
 function triOnOrBefore(series: Bar[], target: number): Bar | null {
   if (series.length === 0) return null;
@@ -169,9 +201,32 @@ function triOnOrBefore(series: Bar[], target: number): Bar | null {
   return series[ans];
 }
 
-function indexForCategory(category: string): BenchmarkIndex | 'DEBT' {
+// AMFI debt scheme categories — matched on distinctive terms so a fund maps to
+// DEBT with or without a "Debt - " prefix. Kept narrow to avoid catching equity
+// (e.g. "banking and psu" not bare "psu", which also names PSU equity funds).
+const DEBT_RE =
+  /duration|debt|liquid|ultra short|overnight|money market|gilt|bond|credit risk|target maturity|banking and psu|banking & psu/;
+
+function indexForCategory(category: string, rules: CategoryRule[]): BenchmarkIndex {
   const c = category.toLowerCase();
-  if (/duration|debt|liquid|ultra short/.test(c)) return 'DEBT';
+
+  // Admin-managed rules win. When several keywords match, the longest (most
+  // specific) one decides — so "banking and psu" (debt) beats "banking"
+  // (equity sectoral) for a "Banking and PSU Fund".
+  let best: BenchmarkIndex | null = null;
+  let bestLen = 0;
+  for (const r of rules) {
+    for (const kw of r.keywords) {
+      if (kw && kw.length > bestLen && c.includes(kw)) {
+        best = r.benchmark;
+        bestLen = kw.length;
+      }
+    }
+  }
+  if (best) return best;
+
+  // Fallback when nothing in the table matched.
+  if (DEBT_RE.test(c)) return 'DEBT';
   if (/small/.test(c)) return 'N500';
   if (/mid/.test(c) && !/large/.test(c)) return 'NLM';
   return 'N50';
@@ -184,29 +239,30 @@ function indexForCategory(category: string): BenchmarkIndex | 'DEBT' {
  */
 export function benchXirrFromSeries(
   seriesMap: SeriesMap,
+  rules: CategoryRule[],
   category: string,
   invDate: string
 ): number {
-  const idx = indexForCategory(category ?? '');
-  if (idx === 'DEBT') return DEBT_RATE;
+  const idx = indexForCategory(category ?? '', rules);
+  const fallback = idx === 'DEBT' ? DEBT_FALLBACK : EQUITY_FALLBACK;
 
   const series = seriesMap[idx] ?? [];
-  if (series.length === 0) return EQUITY_FALLBACK;
+  if (series.length === 0) return fallback;
 
   const start = parseFlexibleDate(invDate);
-  if (start === null) return EQUITY_FALLBACK;
+  if (start === null) return fallback;
 
   const startBar = triOnOrBefore(series, start);
   const endBar = series[series.length - 1];
   if (!startBar || !endBar || startBar.t >= endBar.t || startBar.v <= 0) {
-    return EQUITY_FALLBACK;
+    return fallback;
   }
 
   const r = xirr([
     { amount: -startBar.v, t: startBar.t },
     { amount: endBar.v, t: endBar.t },
   ]);
-  if (!isFinite(r)) return EQUITY_FALLBACK;
+  if (!isFinite(r)) return fallback;
   return Math.round(r * 100 * 100) / 100; // fraction → percent, 2dp
 }
 
@@ -223,12 +279,15 @@ export async function processRawFunds(
   raw: RawFundRecord[],
   thresholds: AlphaThresholds
 ): Promise<FundRecord[]> {
-  const series = await loadBenchmarkSeries();
+  const [series, rules] = await Promise.all([
+    loadBenchmarkSeries(),
+    loadCategoryMappings(),
+  ]);
 
   return raw
     .filter((f) => f && typeof f.fund_xirr === 'number' && f.days)
     .map((f) => {
-      const bx = benchXirrFromSeries(series, f.category ?? '', f.inv_date ?? '');
+      const bx = benchXirrFromSeries(series, rules, f.category ?? '', f.inv_date ?? '');
       const alpha = Math.round((+f.fund_xirr - bx) * 100) / 100;
       const signal = classify(alpha, +f.days, thresholds);
       return {

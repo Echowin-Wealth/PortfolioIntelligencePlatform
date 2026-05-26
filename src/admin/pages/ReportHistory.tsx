@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react';
 import { supabase } from '@/shared/supabaseClient';
+import { processRawFunds } from '@/shared/alphaEngine';
+import { generatePDF } from '@/shared/pdfReport';
+import { DEFAULT_THRESHOLDS } from '@/shared/types';
 import type { ReportHistory as ReportHistoryType } from '@/shared/types';
+import { toast } from '@/components/ui/sonner';
 
 type ProfileSummary = { name: string; email: string; phone: string | null };
 type ReportHistoryRow = ReportHistoryType & { profiles?: ProfileSummary | null };
@@ -21,22 +25,86 @@ import {
 import { formatPercent } from '@/shared/lib/utils';
 
 const PAGE_SIZE = 25;
+const DISTRIBUTOR_NAME = 'Echowin Wealth Private Limited';
+
+function reportDate(iso?: string) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' });
+}
 
 export function ReportHistory() {
   const [reports, setReports] = useState<ReportHistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [query, setQuery] = useState('');
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  async function downloadPdf(row: ReportHistoryRow) {
+    if (!row.id || !row.funds_json) return;
+    setDownloadingId(row.id);
+    try {
+      // The PDF is rebuilt client-side from the raw funds stored at generation
+      // time — no re-analysis or LLM call needed.
+      const processed = await processRawFunds(row.funds_json, DEFAULT_THRESHOLDS);
+      await generatePDF(
+        processed,
+        row.investor,
+        reportDate(row.created_at),
+        DISTRIBUTOR_NAME,
+        DEFAULT_THRESHOLDS
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not generate the PDF.');
+    } finally {
+      setDownloadingId(null);
+    }
+  }
 
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const { data } = await supabase
+
+      const { data, error } = await supabase
         .from('report_history')
-        .select('*, profiles(name, email, phone)')
+        .select('*')
         .order('created_at', { ascending: false })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-      setReports((data as ReportHistoryRow[]) ?? []);
+
+      if (error) {
+        console.error('Failed to load report history', error);
+        setReports([]);
+        setLoading(false);
+        return;
+      }
+
+      const rows = (data as ReportHistoryRow[]) ?? [];
+
+      // report_history.user_id references auth.users (not public.profiles), so
+      // PostgREST can't embed profiles directly. Fetch the matching profiles in
+      // a second query and merge. (Admin-generated rows have a null user_id and
+      // simply have no profile to attach. Which profiles are visible is still
+      // governed by RLS — see migration 004.)
+      const userIds = [
+        ...new Set(rows.map((r) => r.user_id).filter((id): id is string => Boolean(id))),
+      ];
+      if (userIds.length > 0) {
+        const { data: profs, error: profErr } = await supabase
+          .from('profiles')
+          .select('id, name, email, phone')
+          .in('id', userIds);
+        if (profErr) {
+          console.error('Failed to load profiles for report history', profErr);
+        } else {
+          const byId = new Map(
+            (profs ?? []).map((p) => [(p as { id: string }).id, p as ProfileSummary & { id: string }])
+          );
+          for (const r of rows) {
+            if (r.user_id) r.profiles = byId.get(r.user_id) ?? null;
+          }
+        }
+      }
+
+      setReports(rows);
       setLoading(false);
     }
     load();
@@ -119,6 +187,7 @@ export function ReportHistory() {
                 <TableHead className="text-right">Exit</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Generated</TableHead>
+                <TableHead className="text-right">PDF</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -161,18 +230,31 @@ export function ReportHistory() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-[var(--color-ink-soft)]">
-                    {r.created_at
-                      ? new Date(r.created_at).toLocaleString('en-IN', {
-                          dateStyle: 'short',
-                          timeStyle: 'short',
-                        })
-                      : '—'}
+                    {reportDate(r.created_at)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={!r.funds_json || downloadingId === r.id}
+                      onClick={() => downloadPdf(r)}
+                      title={r.funds_json ? 'Download PDF' : 'No stored data for this report'}
+                    >
+                      {downloadingId === r.id ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Download className="size-3.5" />
+                      )}
+                      PDF
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={11} className="py-10 text-center text-[var(--color-ink-soft)]">
+                  <TableCell colSpan={12} className="py-10 text-center text-[var(--color-ink-soft)]">
                     {query ? `No matches for "${query}"` : 'No reports found.'}
                   </TableCell>
                 </TableRow>
