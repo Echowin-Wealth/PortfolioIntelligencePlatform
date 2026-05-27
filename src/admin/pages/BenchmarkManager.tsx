@@ -26,11 +26,14 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/shared/lib/utils";
 
-const TABS: BenchmarkIndex[] = ["N50", "NLM", "N500", "DEBT"];
+const TABS: BenchmarkIndex[] = ["N50", "NLM250", "N500", "MIDSMALL", "GOLD", "SILVER", "DEBT"];
 const TAB_LABELS: Record<BenchmarkIndex, string> = {
   N50: "Nifty 50 TRI",
-  NLM: "Nifty LargeMidcap 250 TRI",
+  NLM250: "Nifty LargeMidcap 250 TRI",
   N500: "Nifty 500 TRI",
+  MIDSMALL: "Nifty MidSmallcap 400 TRI",
+  GOLD: "Domestic Gold Price",
+  SILVER: "Domestic Silver Price",
   DEBT: "CRISIL Debt TRI",
 };
 

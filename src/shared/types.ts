@@ -21,7 +21,7 @@ export interface RawFundRecord {
   investor_name?: string;
 }
 
-export type BenchmarkIndex = 'N50' | 'NLM' | 'N500' | 'DEBT';
+export type BenchmarkIndex = 'N50' | 'NLM250' | 'N500' | 'MIDSMALL' | 'GOLD' | 'SILVER' | 'DEBT';
 
 export interface BenchmarkPrice {
   id?: string;

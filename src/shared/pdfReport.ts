@@ -395,7 +395,9 @@ export async function generatePDF(
     `Revised Rules: <${thresholds.age}yr -> REVIEW; >= ${thresholds.age}yr & Alpha < ${thresholds.exit}% -> EXIT; ` +
     `0 to ${thresholds.star}% -> GOOD; >= ${thresholds.star}% -> STAR. Alpha = Fund XIRR - Benchmark XIRR. ` +
     `Benchmarks: Nifty 50 TRI (Large/Flexi/Sectoral/Hybrid/FOF/L&M Cap), NLM250 TRI (Mid Cap), ` +
-    `Nifty500 TRI (Small Cap), CRISIL 5.8% (Debt). Mutual fund investments are subject to market risk. ` +
+    `Nifty500 TRI (Small Cap), Nifty MidSmallcap 400 TRI (Mid & Small Cap), ` +
+    `Gold Price (Gold), Silver Price (Silver), CRISIL 5.8% (Debt). ` +
+    `Mutual fund investments are subject to market risk. ` +
     `Informational only; not investment advice. Prepared by ${distributorName}. Generated: ${reportDate}.`;
   doc.text(doc.splitTextToSize(disc, CW) as string[], M, y);
 

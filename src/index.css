@@ -51,6 +51,11 @@
   --color-info-soft: #eff6ff;
   --color-info-line: #bfdbfe;
   --color-gold: #d97706;
+  --color-gold-soft: #fef3c7;
+  --color-gold-line: #fcd34d;
+  --color-silver: #64748b;
+  --color-silver-soft: #f1f5f9;
+  --color-silver-line: #cbd5e1;
 
   /* ── Radii ──────────────────────────────────────────────────────────── */
   --radius-xs: 4px;

@@ -14,19 +14,25 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from '@/components/ui/sonner';
 import { cn } from '@/shared/lib/utils';
 
-type BenchCode = 'N50' | 'NLM' | 'N500' | 'DEBT';
+type BenchCode = 'N50' | 'NLM250' | 'N500' | 'MIDSMALL' | 'GOLD' | 'SILVER' | 'DEBT';
 
 const BENCH_OPTIONS: { code: BenchCode; name: string; desc: string }[] = [
   { code: 'N50', name: 'Nifty 50 TRI', desc: 'Large cap, flexi cap, hybrid, FOF, sectoral' },
-  { code: 'NLM', name: 'Nifty LargeMidcap 250 TRI', desc: 'Large & mid cap, mid cap funds' },
+  { code: 'NLM250', name: 'Nifty LargeMidcap 250 TRI', desc: 'Large & mid cap, mid cap funds' },
   { code: 'N500', name: 'Nifty 500 TRI', desc: 'Small cap funds' },
+  { code: 'MIDSMALL', name: 'Nifty MidSmallcap 400 TRI', desc: 'Mid & small cap funds' },
+  { code: 'GOLD', name: 'Domestic Gold Price', desc: 'Gold, gold ETF/FOF funds' },
+  { code: 'SILVER', name: 'Domestic Silver Price', desc: 'Silver, silver ETF/FOF funds' },
   { code: 'DEBT', name: 'Debt TRI', desc: 'Debt, liquid, ultra-short, money market' },
 ];
 
-const benchVariant: Record<BenchCode, 'success' | 'info' | 'brand' | 'warning'> = {
+const benchVariant: Record<BenchCode, 'success' | 'info' | 'brand' | 'warning' | 'danger' | 'gold' | 'silver'> = {
   N50: 'success',
-  NLM: 'info',
+  NLM250: 'info',
   N500: 'brand',
+  MIDSMALL: 'danger',
+  GOLD: 'gold',
+  SILVER: 'silver',
   DEBT: 'warning',
 };
 

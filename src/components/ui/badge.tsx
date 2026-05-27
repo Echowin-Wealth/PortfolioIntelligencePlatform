@@ -19,6 +19,10 @@ const badgeVariants = cva(
           'bg-[var(--color-warning-soft)] text-[var(--color-gold)] ring-1 ring-inset ring-[var(--color-warning-line)]',
         danger:
           'bg-[var(--color-danger-soft)] text-[var(--color-danger)] ring-1 ring-inset ring-[var(--color-danger-line)]',
+        gold:
+          'bg-[var(--color-gold-soft)] text-[var(--color-gold)] ring-1 ring-inset ring-[var(--color-gold-line)]',
+        silver:
+          'bg-[var(--color-silver-soft)] text-[var(--color-silver)] ring-1 ring-inset ring-[var(--color-silver-line)]',
         outline:
           'bg-white text-[var(--color-ink-muted)] ring-1 ring-inset ring-[var(--color-line)]',
       },

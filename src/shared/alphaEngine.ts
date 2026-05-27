@@ -121,7 +121,7 @@ let cachedSeries: SeriesMap | null = null;
 export async function loadBenchmarkSeries(): Promise<SeriesMap> {
   if (cachedSeries) return cachedSeries;
 
-  const map: SeriesMap = { N50: [], NLM: [], N500: [], DEBT: [] };
+  const map: SeriesMap = { N50: [], NLM250: [], N500: [], MIDSMALL: [], GOLD: [], SILVER: [], DEBT: [] };
   const PAGE = 1000; // Supabase caps select at 1000 rows — page through
 
   for (let from = 0; ; from += PAGE) {
@@ -227,8 +227,10 @@ function indexForCategory(category: string, rules: CategoryRule[]): BenchmarkInd
 
   // Fallback when nothing in the table matched.
   if (DEBT_RE.test(c)) return 'DEBT';
+  if (/gold/.test(c)) return 'GOLD';
+  if (/silver/.test(c)) return 'SILVER';
   if (/small/.test(c)) return 'N500';
-  if (/mid/.test(c) && !/large/.test(c)) return 'NLM';
+  if (/mid/.test(c) && !/large/.test(c)) return 'NLM250';
   return 'N50';
 }
 
