@@ -22,7 +22,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { formatPercent } from '@/shared/lib/utils';
 
 const PAGE_SIZE = 25;
 const DISTRIBUTOR_NAME = 'Echowin Wealth Private Limited';
