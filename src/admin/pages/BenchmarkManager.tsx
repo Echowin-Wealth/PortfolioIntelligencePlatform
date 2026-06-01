@@ -269,6 +269,27 @@ export function BenchmarkManager() {
   }, [activeTab, loadData]);
 
   async function handleImport(rows: BenchmarkPrice[]) {
+    // Full replace: a new file is authoritative for the whole series. We clear
+    // the index's existing rows first, then insert the file. Without this, the
+    // upsert only overwrote rows whose (index_code, date) matched exactly, so a
+    // file with even slightly different dates left the old rows in place.
+    if (
+      !confirm(
+        `Replace the entire ${activeTab} series with the ${rows.length} rows in this file?\n\n` +
+          `All existing ${activeTab} rows will be deleted first, then the file is imported. This cannot be undone.`,
+      )
+    )
+      return;
+
+    const { error: delErr } = await supabase
+      .from("benchmark_prices")
+      .delete()
+      .eq("index_code", activeTab);
+    if (delErr) {
+      toast.error("Could not clear existing rows — nothing changed");
+      return;
+    }
+
     let imported = 0;
     for (let i = 0; i < rows.length; i += CHUNK) {
       const chunk = rows.slice(i, i + CHUNK);
@@ -282,7 +303,7 @@ export function BenchmarkManager() {
       imported += chunk.length;
     }
     if (imported > 0) {
-      toast.success(`Imported ${imported} rows`);
+      toast.success(`Replaced ${activeTab} with ${imported} rows`);
       invalidateBenchmarkCache();
       loadData(activeTab);
     }

@@ -181,10 +181,10 @@ export function ReportHistory() {
                 <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead className="text-right">Funds</TableHead>
-                <TableHead className="text-right">Avg XIRR</TableHead>
-                <TableHead className="text-right">Avg α</TableHead>
-                <TableHead className="text-right">Star</TableHead>
-                <TableHead className="text-right">Exit</TableHead>
+                {/* <TableHead className="text-right">Avg XIRR</TableHead> */}
+                {/* <TableHead className="text-right">Avg α</TableHead> */}
+                {/* <TableHead className="text-right">Star</TableHead> */}
+                {/* <TableHead className="text-right">Exit</TableHead> */}
                 <TableHead>Source</TableHead>
                 <TableHead>Generated</TableHead>
                 <TableHead className="text-right">PDF</TableHead>
@@ -198,10 +198,10 @@ export function ReportHistory() {
                   <TableCell className="text-[var(--color-ink-soft)]">{r.profiles?.email || '—'}</TableCell>
                   <TableCell className="font-mono text-[var(--color-ink-soft)]">{r.profiles?.phone || '—'}</TableCell>
                   <TableCell className="text-right font-mono">{r.fund_count}</TableCell>
-                  <TableCell className="text-right font-mono">
+                  {/* <TableCell className="text-right font-mono">
                     {Number(r.avg_xirr).toFixed(2)}%
-                  </TableCell>
-                  <TableCell
+                  </TableCell> */}
+                  {/* <TableCell
                     className={
                       'text-right font-mono font-semibold ' +
                       (Number(r.avg_alpha) >= 0
@@ -210,11 +210,11 @@ export function ReportHistory() {
                     }
                   >
                     {formatPercent(Number(r.avg_alpha), { sign: true })}
-                  </TableCell>
-                  <TableCell className="text-right font-mono text-[var(--color-gold)]">
+                  </TableCell> */}
+                  {/* <TableCell className="text-right font-mono text-[var(--color-gold)]">
                     {r.star_count}
-                  </TableCell>
-                  <TableCell
+                  </TableCell> */}
+                  {/* <TableCell
                     className={
                       'text-right font-mono ' +
                       (r.exit_count > 0
@@ -223,7 +223,7 @@ export function ReportHistory() {
                     }
                   >
                     {r.exit_count}
-                  </TableCell>
+                  </TableCell> */}
                   <TableCell>
                     <Badge variant={r.generated_by === 'admin' ? 'info' : 'success'}>
                       {r.generated_by}
