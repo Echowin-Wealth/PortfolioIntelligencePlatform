@@ -102,7 +102,14 @@ export function GenerateReport() {
       setProgressMsg('Applying alpha rules…');
 
       const processed = await processRawFunds(data.funds, thresholds);
-      const name = invNameOverride.trim() || data.funds[0]?.investor_name || 'Client';
+      const uniqueNames = [
+        ...new Set(
+          data.funds
+            .map(f => f.investor_name?.trim())
+            .filter((n): n is string => Boolean(n))
+        ),
+      ];
+      const name = invNameOverride.trim() || uniqueNames.join(', ') || 'Client';
       setFunds(processed);
       setInvestorName(name);
 

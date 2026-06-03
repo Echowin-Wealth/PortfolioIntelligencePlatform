@@ -187,8 +187,14 @@ ${text.substring(0, 90000)}`;
   }
 
   // ── Persist a skeleton row. Client patches alpha metrics via RLS update.
-  const investor =
-    (funds[0]?.investor_name as string | undefined)?.trim() || 'Client';
+  const uniqueInvestorNames = [
+    ...new Set(
+      (funds as Array<Record<string, unknown>>)
+        .map(f => (f.investor_name as string | undefined)?.trim())
+        .filter((n): n is string => Boolean(n))
+    ),
+  ];
+  const investor = uniqueInvestorNames.length > 0 ? uniqueInvestorNames.join(', ') : 'Client';
   let reportId: string | null = null;
   const { data: inserted, error: insertErr } = await supabase
     .from('report_history')

@@ -136,7 +136,15 @@ export function ClientApp() {
 
       const processed = await processRawFunds(data.funds, thresholds);
       setFunds(processed);
-      setInvestorName(data.funds[0]?.investor_name ?? 'Client');
+
+      const uniqueNames = [
+        ...new Set(
+          data.funds
+            .map(f => f.investor_name?.trim())
+            .filter((n): n is string => Boolean(n))
+        ),
+      ];
+      setInvestorName(uniqueNames.join(', ') || 'Client');
 
       // Patch the report row created by the edge function with alpha metrics.
       // RLS allows self-update on rows where user_id = auth.uid().
