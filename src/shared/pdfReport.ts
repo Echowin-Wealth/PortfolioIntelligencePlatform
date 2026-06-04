@@ -423,7 +423,7 @@ export async function generatePDF(
     // Family-level KPI tiles
     const famAvgA = funds.reduce((s, f) => s + f.alpha, 0) / funds.length;
     const famAvgX = funds.reduce((s, f) => s + f.fund_xirr, 0) / funds.length;
-    const famHitRate = Math.round((funds.filter(f => f.alpha > 0).length / funds.length) * 100);
+    // const famHitRate = Math.round((funds.filter(f => f.alpha > 0).length / funds.length) * 100);
     const famStars = funds.filter(f => f.signal === 'STAR').length;
     const famExits = funds.filter(f => f.signal === 'EXIT').length;
 
