@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
 import type { Session } from '@supabase/supabase-js';
 
 export function useAuth() {
@@ -7,19 +6,33 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+
+    // Load supabase-js on demand so its large bundle stays out of the landing
+    // page's critical render path. Auth state resolves a tick after first paint.
+    void import('../supabaseClient').then(({ supabase }) => {
+      if (cancelled) return;
+      supabase.auth.getSession().then(({ data }) => {
+        setSession(data.session);
+        setLoading(false);
+      });
+      const { data: listener } = supabase.auth.onAuthStateChange((_event, next) => {
+        setSession(next);
+      });
+      unsubscribe = () => listener.subscription.unsubscribe();
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, []);
 
-  const signOut = () => supabase.auth.signOut();
+  const signOut = async () => {
+    const { supabase } = await import('../supabaseClient');
+    return supabase.auth.signOut();
+  };
 
   return { session, loading, signOut };
 }

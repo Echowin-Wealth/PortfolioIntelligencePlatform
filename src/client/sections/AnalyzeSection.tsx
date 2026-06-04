@@ -5,9 +5,15 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { lazy, Suspense } from 'react';
 import { UploadZone } from '@/client/components/UploadZone';
-import { ResultsView } from '@/client/components/ResultsView';
 import { cn } from '@/shared/lib/utils';
+
+// Results (charts + PDF export) only render at step 3. Defer their heavy deps
+// (recharts, jspdf) so they never load on the landing page's first paint.
+const ResultsView = lazy(() =>
+  import('@/client/components/ResultsView').then((m) => ({ default: m.ResultsView }))
+);
 
 type Step = 1 | 2 | 3;
 
@@ -174,12 +180,20 @@ export function AnalyzeSection(props: AnalyzeSectionProps) {
           </div>
         ) : (
           <div className="mx-auto max-w-6xl">
-            <ResultsView
-              funds={funds}
-              investorName={investorName}
-              thresholds={thresholds}
-              distributorName={distributorName}
-            />
+            <Suspense
+              fallback={
+                <div className="flex justify-center py-20">
+                  <Loader2 className="size-6 animate-spin text-[var(--color-ink-soft)]" />
+                </div>
+              }
+            >
+              <ResultsView
+                funds={funds}
+                investorName={investorName}
+                thresholds={thresholds}
+                distributorName={distributorName}
+              />
+            </Suspense>
             <div className="mt-12 flex justify-center">
               <Button variant="outline" onClick={onReset}>
                 <ArrowLeft className="size-4" />

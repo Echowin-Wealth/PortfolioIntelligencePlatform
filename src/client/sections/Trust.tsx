@@ -1,6 +1,8 @@
+import { motion } from 'framer-motion';
 import { Lock, ShieldCheck, EyeOff, Zap } from 'lucide-react';
 import { Container } from '@/shared/ui/Container';
 import { SectionHeading } from '@/shared/ui/SectionHeading';
+import { staggerParent, staggerChild, VIEWPORT_ONCE } from '@/shared/lib/motion';
 
 const items = [
   {
@@ -35,20 +37,27 @@ export function Trust() {
           description="Echowin Wealth was built by AMFI-registered distributors who took their own client privacy obligations and made them the product."
         />
 
-        <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <motion.div
+          variants={staggerParent}
+          initial="hidden"
+          whileInView="visible"
+          viewport={VIEWPORT_ONCE}
+          className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        >
           {items.map((it) => (
-            <div
+            <motion.div
               key={it.title}
-              className="flex flex-col gap-3 rounded-2xl bg-white p-6 ring-1 ring-[var(--color-line)]"
+              variants={staggerChild}
+              className="hover-lift flex flex-col gap-3 rounded-2xl bg-white p-6 ring-1 ring-[var(--color-line)]"
             >
               <div className="grid size-9 place-items-center rounded-lg bg-[var(--color-success-soft)] text-[var(--color-success)] ring-1 ring-inset ring-[var(--color-success-line)]">
                 <it.icon className="size-4" />
               </div>
               <h3 className="text-[15px] font-semibold text-[var(--color-ink)]">{it.title}</h3>
               <p className="text-[13.5px] leading-relaxed text-[var(--color-ink-muted)]">{it.body}</p>
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       </Container>
     </section>
   );

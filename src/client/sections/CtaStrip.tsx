@@ -2,12 +2,13 @@ import { ArrowRight } from 'lucide-react';
 import { Container } from '@/shared/ui/Container';
 import { GradientMesh } from '@/shared/ui/GradientMesh';
 import { Button } from '@/components/ui/button';
+import { Reveal } from '@/shared/ui/Reveal';
 
 export function CtaStrip() {
   return (
     <section className="relative isolate overflow-hidden py-24 sm:py-28">
       <Container size="xl">
-        <div className="relative isolate overflow-hidden rounded-[28px] bg-[var(--color-ink)] px-8 py-16 sm:px-14 sm:py-20">
+        <Reveal variant="scale" className="relative isolate overflow-hidden rounded-[28px] bg-[var(--color-ink)] px-8 py-16 sm:px-14 sm:py-20">
           <GradientMesh variant="cta" className="opacity-90" />
           <div className="relative flex flex-col items-center text-center text-white">
             <h2 className="font-display text-balance text-[34px] font-bold leading-[1.05] tracking-[-0.025em] sm:text-[48px]">
@@ -20,7 +21,7 @@ export function CtaStrip() {
               now — no signup, no credit card.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="xl" variant="secondary" className="bg-white text-[var(--color-ink)]">
+              <Button asChild size="xl" variant="secondary" className="bg-white text-[var(--color-ink)] transition-transform hover:scale-[1.03]">
                 <a href="#analyze">
                   Analyze my portfolio
                   <ArrowRight className="size-4" />
@@ -31,7 +32,7 @@ export function CtaStrip() {
               </Button>
             </div>
           </div>
-        </div>
+        </Reveal>
       </Container>
     </section>
   );

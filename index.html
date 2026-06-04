@@ -8,10 +8,20 @@
     <meta name="description" content="Echowin Wealth — Portfolio Alpha Intelligence. Decode your wealth statement in seconds." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Load fonts without blocking first paint: fetch as a non-applied
+         "print" stylesheet, then swap to "all" once it arrives. -->
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
     <title>Echowin Wealth — Portfolio Alpha Intelligence</title>
   </head>
   <body class="antialiased">

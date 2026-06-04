@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { Container } from '@/shared/ui/Container';
 import { SectionHeading } from '@/shared/ui/SectionHeading';
+import { staggerParent, staggerChild, VIEWPORT_ONCE } from '@/shared/lib/motion';
 
 const features = [
   {
@@ -53,17 +54,20 @@ export function Features() {
           description="The decisions a fee-only RIA would help you make — encoded into a single report."
         />
 
-        <div className="mt-16 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {features.map((f, i) => (
+        <motion.div
+          variants={staggerParent}
+          initial="hidden"
+          whileInView="visible"
+          viewport={VIEWPORT_ONCE}
+          className="mt-16 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          {features.map((f) => (
             <motion.div
               key={f.title}
-              initial={{ opacity: 0, y: 14 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-60px' }}
-              transition={{ duration: 0.45, delay: (i % 3) * 0.06, ease: [0.16, 1, 0.3, 1] }}
-              className="group relative rounded-2xl bg-white p-6 ring-1 ring-[var(--color-line)] transition-all hover:shadow-[var(--shadow-md)] hover:-translate-y-0.5"
+              variants={staggerChild}
+              className="group hover-lift relative rounded-2xl bg-white p-6 ring-1 ring-[var(--color-line)]"
             >
-              <div className="grid size-10 place-items-center rounded-lg bg-[var(--color-brand-50)] text-[var(--color-brand-600)] ring-1 ring-inset ring-[var(--color-brand-100)]">
+              <div className="grid size-10 place-items-center rounded-lg bg-[var(--color-brand-50)] text-[var(--color-brand-600)] ring-1 ring-inset ring-[var(--color-brand-100)] transition-transform group-hover:scale-105">
                 <f.icon className="size-5" />
               </div>
               <h3 className="mt-4 text-[16px] font-semibold text-[var(--color-ink)]">{f.title}</h3>
@@ -72,7 +76,7 @@ export function Features() {
               </p>
             </motion.div>
           ))}
-        </div>
+        </motion.div>
       </Container>
     </section>
   );

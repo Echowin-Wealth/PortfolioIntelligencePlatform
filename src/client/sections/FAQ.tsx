@@ -1,5 +1,6 @@
 import { Container } from '@/shared/ui/Container';
 import { SectionHeading } from '@/shared/ui/SectionHeading';
+import { Reveal } from '@/shared/ui/Reveal';
 import {
   Accordion,
   AccordionContent,
@@ -44,7 +45,7 @@ export function FAQ() {
           description="If anything's missing, write to hello@echowin.in and we'll add it."
         />
 
-        <div className="mt-12">
+        <Reveal className="mt-12">
           <Accordion type="single" collapsible className="rounded-2xl bg-white ring-1 ring-[var(--color-line)] px-6 sm:px-8">
             {faqs.map((f, i) => (
               <AccordionItem
@@ -57,7 +58,7 @@ export function FAQ() {
               </AccordionItem>
             ))}
           </Accordion>
-        </div>
+        </Reveal>
       </Container>
     </section>
   );

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Container } from '@/shared/ui/Container';
 import { BrandLogo } from '@/shared/ui/BrandLogo';
+import { Reveal } from '@/shared/ui/Reveal';
 
 const cols = [
   {
@@ -33,7 +34,7 @@ export function Footer() {
   return (
     <footer className="relative border-t border-[var(--color-line)] bg-white">
       <Container size="xl" className="py-16">
-        <div className="grid gap-10 md:grid-cols-[1.4fr_2fr]">
+        <Reveal className="grid gap-10 md:grid-cols-[1.4fr_2fr]">
           <div className="max-w-sm">
             <BrandLogo variant="compact" />
             <p className="mt-4 text-[14px] leading-relaxed text-[var(--color-ink-muted)]">
@@ -45,7 +46,7 @@ export function Footer() {
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
             {cols.map((col) => (
               <div key={col.title}>
-                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-ink-faint)]">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-ink-soft)]">
                   {col.title}
                 </div>
                 <ul className="mt-4 space-y-2.5">
@@ -77,14 +78,14 @@ export function Footer() {
               </div>
             ))}
           </div>
-        </div>
+        </Reveal>
 
         <div className="mt-14 flex flex-col gap-3 border-t border-[var(--color-line)] pt-8 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-[12.5px] text-[var(--color-ink-soft)]">
             © {new Date().getFullYear()} Echowin Wealth Private Limited. Mutual
             fund investments are subject to market risks.
           </div>
-          <div className="text-[11px] font-mono uppercase tracking-[0.1em] text-[var(--color-ink-faint)]">
+          <div className="text-[11px] font-mono uppercase tracking-[0.1em] text-[var(--color-ink-soft)]">
             Built with care · v1.0
           </div>
         </div>

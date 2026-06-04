@@ -1,6 +1,5 @@
 import { useState, type SyntheticEvent } from 'react';
 import { Loader2, ShieldCheck } from 'lucide-react';
-import { supabase } from '@/shared/supabaseClient';
 import {
   Dialog,
   DialogContent,
@@ -56,6 +55,7 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
     // the path. Whatever URL we use here must ALSO be whitelisted under
     // Supabase Auth → URL Configuration → Redirect URLs.
     const redirectTo = window.location.origin + window.location.pathname;
+    const { supabase } = await import('@/shared/supabaseClient');
     const { data, error: authError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo },
@@ -97,6 +97,7 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
     }
 
     setEmailLoading(true);
+    const { supabase } = await import('@/shared/supabaseClient');
 
     if (mode === 'signup') {
       const { data, error: signUpErr } = await supabase.auth.signUp({

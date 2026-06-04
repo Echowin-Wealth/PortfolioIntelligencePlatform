@@ -1,21 +1,22 @@
 import { useEffect, useState } from 'react';
-import { extractText } from '@/shared/pdfExtract';
 import { processRawFunds } from '@/shared/alphaEngine';
-import { supabase } from '@/shared/supabaseClient';
 import { useAuth } from '@/shared/hooks/useAuth';
 import type { FundRecord, AlphaThresholds, RawFundRecord } from '@/shared/types';
 import { DEFAULT_THRESHOLDS } from '@/shared/types';
 
 import { TopNav } from './sections/TopNav';
 import { Hero } from './sections/Hero';
+import { LogoCloud } from './sections/LogoCloud';
 import { AnalyzeSection } from './sections/AnalyzeSection';
 import { HowItWorks } from './sections/HowItWorks';
 import { Features } from './sections/Features';
 import { SampleInsights } from './sections/SampleInsights';
+import { Testimonials } from './sections/Testimonials';
 import { Trust } from './sections/Trust';
 import { FAQ } from './sections/FAQ';
 import { CtaStrip } from './sections/CtaStrip';
 import { Footer } from './sections/Footer';
+import { ScrollProgress } from '@/shared/ui/ScrollProgress';
 import { LoginModal } from './auth/LoginModal';
 import { toast } from '@/components/ui/sonner';
 
@@ -98,6 +99,9 @@ export function ClientApp() {
     setStep(2);
 
     try {
+      // pdfjs is ~700KB; load it on demand the first time someone analyses a
+      // file rather than shipping it in the landing page bundle.
+      const { extractText } = await import('@/shared/pdfExtract');
       const text = await extractText(file);
       setProgress(30);
       setProgressMsg('Analysing with AI…');
@@ -149,6 +153,7 @@ export function ClientApp() {
       // Patch the report row created by the edge function with alpha metrics.
       // RLS allows self-update on rows where user_id = auth.uid().
       if (data.reportId && processed.length > 0) {
+        const { supabase } = await import('@/shared/supabaseClient');
         const meta = {
           avg_alpha:
             Math.round((processed.reduce((s, f) => s + f.alpha, 0) / processed.length) * 100) / 100,
@@ -192,9 +197,11 @@ export function ClientApp() {
 
   return (
     <div className="bg-white text-[var(--color-ink)]">
+      <ScrollProgress />
       <TopNav onLogin={() => setLoginOpen(true)} />
       <main>
         <Hero />
+        <LogoCloud />
         <AnalyzeSection
           step={step}
           file={file}
@@ -215,6 +222,7 @@ export function ClientApp() {
         <HowItWorks />
         <Features />
         <SampleInsights />
+        <Testimonials />
         <Trust />
         <FAQ />
         <CtaStrip />

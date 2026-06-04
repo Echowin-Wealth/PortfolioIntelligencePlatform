@@ -192,6 +192,26 @@
   opacity: 1;
 }
 
+/* Reusable hover-lift for cards — translate + soft shadow on a spring ease. */
+@utility hover-lift {
+  transition: transform 0.25s var(--ease-spring), box-shadow 0.25s var(--ease-spring);
+}
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Seamless marquee track: lay two identical groups side by side and translate
+   the wrapper by -50%. Pauses on hover. */
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 30s linear infinite;
+}
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
 /* Soft brand-tinted glow used behind hero/CTA cards */
 .brand-glow {
   position: relative;

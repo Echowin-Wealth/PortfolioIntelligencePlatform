@@ -1,5 +1,6 @@
 import { Container } from '@/shared/ui/Container';
 import { SectionHeading } from '@/shared/ui/SectionHeading';
+import { Reveal } from '@/shared/ui/Reveal';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { TrendingUp, TrendingDown } from 'lucide-react';
@@ -29,6 +30,7 @@ export function SampleInsights() {
         />
 
         <div className="mt-14 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+          <Reveal variant="left">
           <Card className="overflow-hidden">
             <div className="flex items-center justify-between border-b border-[var(--color-line)] px-6 py-4">
               <div>
@@ -93,9 +95,10 @@ export function SampleInsights() {
               })}
             </div>
           </Card>
+          </Reveal>
 
-          <div className="flex flex-col gap-4">
-            <Card className="p-6">
+          <Reveal variant="right" delay={0.1} className="flex flex-col gap-4">
+            <Card className="hover-lift p-6">
               <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-ink-soft)]">
                 Tier split
               </div>
@@ -125,7 +128,7 @@ export function SampleInsights() {
               </div>
             </Card>
 
-            <Card className="p-6">
+            <Card className="hover-lift p-6">
               <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--color-ink-soft)]">
                 Action queue
               </div>
@@ -146,7 +149,7 @@ export function SampleInsights() {
                 </div>
               </div>
             </Card>
-          </div>
+          </Reveal>
         </div>
       </Container>
     </section>

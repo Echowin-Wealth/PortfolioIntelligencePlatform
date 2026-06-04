@@ -64,7 +64,7 @@ export function UploadZone({ file, onFile, onClear }: UploadZoneProps) {
           : 'border-[var(--color-line-strong)] hover:border-[var(--color-brand-400)] hover:bg-[var(--color-brand-50)]/40'
       )}
     >
-      <input {...getInputProps()} />
+      <input {...getInputProps({ 'aria-label': 'Upload your PDF wealth statement' })} />
       <div
         className="mx-auto grid size-14 place-items-center rounded-2xl text-white shadow-[0_10px_30px_-10px_rgba(99,91,255,0.55)]"
         style={{
